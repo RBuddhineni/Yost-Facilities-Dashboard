@@ -2,7 +2,7 @@
 
 A lightweight, client-only dashboard for Yost Facilities staff to monitor ice rink operations. Data is pulled directly from published Google Sheets JSON endpoints; no backend or database is required.
 
-### Features
+### Features type shi
 
 - **Login gate**: Single shared password, stored only in the front-end config.
 - **Main dashboard**: Header with branding, last refresh time, and logout button.
