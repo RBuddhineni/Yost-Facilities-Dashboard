@@ -62,36 +62,6 @@ export const APP_CONFIG = {
         },
       ],
     },
-    {
-      id: "tournaments",
-      label: "Tournaments & Special Events",
-      sheetJsonUrl: null,
-      columns: {
-        timestamp: "Timestamp",
-        eventName: "Event Name",
-        rink: "Rink",
-        startTime: "Start Time",
-        endTime: "End Time",
-        expectedAttendance: "Expected Attendance",
-        notes: "Notes",
-      },
-      kpis: [
-        {
-          id: "events-today",
-          label: "Events Today",
-          columnKey: "eventName",
-          unit: "",
-          format: "count",
-        },
-        {
-          id: "expected-attendance",
-          label: "Expected Attendance",
-          columnKey: "expectedAttendance",
-          unit: "people",
-          format: "integer",
-        },
-      ],
-    },
   ],
 };
 

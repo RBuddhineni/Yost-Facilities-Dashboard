@@ -15,6 +15,8 @@ let appState = {
   error: null,
   // Map<formId, array of rows>
   dataByForm: {},
+  // KPI detail view state
+  viewingKpiId: null, // When set, shows detail view for this KPI
 };
 
 function loadSession() {
@@ -75,6 +77,7 @@ function handleLogout() {
   appState.lastRefresh = null;
   appState.loading = false;
   appState.error = null;
+  appState.viewingKpiId = null;
   saveSession();
   renderApp();
 }
@@ -462,7 +465,7 @@ function renderDashboard() {
         : "";
 
       return `
-        <div class="kpi-card">
+        <div class="kpi-card" data-kpi-id="${kpi.id}" style="cursor: pointer;" title="Click to view historical data">
           <div class="kpi-label">${kpi.label}</div>
           <div class="kpi-value-row">
             <div class="kpi-value">
@@ -600,7 +603,7 @@ function renderDashboard() {
       el.addEventListener("click", () => {
         const formId = el.getAttribute("data-form-id");
         if (formId && formId !== appState.activeFormId) {
-          setState({ activeFormId: formId });
+          setState({ activeFormId: formId, viewingKpiId: null });
         }
       })
     );
@@ -615,11 +618,165 @@ function renderDashboard() {
       refreshAllData();
     });
   }
+
+  // Add click handlers for KPI cards
+  rootEl
+    .querySelectorAll("[data-kpi-id]")
+    .forEach((el) =>
+      el.addEventListener("click", () => {
+        const kpiId = el.getAttribute("data-kpi-id");
+        if (kpiId) {
+          setState({ viewingKpiId: kpiId });
+        }
+      })
+    );
+}
+
+function renderKpiDetail() {
+  if (!rootEl) return;
+
+  const activeForm =
+    APP_CONFIG.forms.find((f) => f.id === appState.activeFormId) ??
+    APP_CONFIG.forms[0];
+  const activeFormRows = appState.dataByForm[activeForm?.id] ?? [];
+  const kpi = activeForm.kpis.find((k) => k.id === appState.viewingKpiId);
+
+  if (!kpi) {
+    // KPI not found, go back to dashboard
+    setState({ viewingKpiId: null });
+    return;
+  }
+
+  // Extract all values for this KPI with timestamps
+  const kpiHistory = activeFormRows
+    .map((row) => {
+      const value = row[kpi.columnKey];
+      const timestamp = row.timestamp;
+      return { value, timestamp };
+    })
+    .filter((entry) => entry.timestamp != null); // Only include entries with timestamps
+
+  // Format values based on KPI format
+  const formatValue = (val) => {
+    if (val == null || val === "") return "—";
+    switch (kpi.format) {
+      case "integer":
+        return formatNumber(val, 0);
+      case "number":
+        return formatNumber(val, kpi.decimals ?? 1);
+      case "string":
+        return String(val);
+      default:
+        return String(val);
+    }
+  };
+
+  const unitHtml = kpi.unit ? ` <span class="kpi-unit" style="font-size:0.9em;opacity:0.7;">${kpi.unit}</span>` : "";
+
+  const historyRowsHtml =
+    kpiHistory.length === 0
+      ? `<tr><td colspan="2" class="logs-empty">No historical data available.</td></tr>`
+      : kpiHistory
+          .map((entry) => {
+            const formattedValue = formatValue(entry.value);
+            const badgeHtml =
+              kpi.goodRange && !Number.isNaN(Number(entry.value))
+                ? (() => {
+                    const num = Number(entry.value);
+                    const inRange =
+                      num >= kpi.goodRange.min && num <= kpi.goodRange.max;
+                    return inRange
+                      ? '<span class="kpi-badge" style="margin-left:8px;">Within target</span>'
+                      : '<span class="kpi-badge bad" style="margin-left:8px;">Out of target</span>';
+                  })()
+                : "";
+            return `
+              <tr>
+                <td>${formatTimestamp(entry.timestamp)}</td>
+                <td style="font-weight:500;">
+                  ${formattedValue}${unitHtml}${badgeHtml}
+                </td>
+              </tr>
+            `;
+          })
+          .join("");
+
+  rootEl.innerHTML = `
+    <div class="app-shell">
+      <div class="app-container">
+        <header class="dashboard-header">
+          <div class="header-left">
+            <div class="brand-mark">Y</div>
+            <div class="header-title-group">
+              <div class="header-title">Yost Facilities</div>
+              <div class="header-subtitle">
+                ${kpi.label} - Historical Data
+              </div>
+            </div>
+          </div>
+          <div class="header-meta">
+            <button class="secondary-button" data-action="back-to-dashboard">
+              ← Back to Dashboard
+            </button>
+            <button class="secondary-button" data-action="logout">
+              &#x274C; Log out
+            </button>
+          </div>
+        </header>
+
+        <main class="dashboard-body">
+          <section>
+            <div class="section-header">
+              <div>
+                <div class="section-title">${kpi.label}</div>
+                <div class="section-subtitle">
+                  Historical values from ${activeForm.label}
+                </div>
+              </div>
+              <div class="chip">
+                Showing
+                <span class="muted" style="margin-left:4px;">
+                  ${kpiHistory.length} ${kpiHistory.length === 1 ? "entry" : "entries"}
+                </span>
+              </div>
+            </div>
+            <div class="table-container">
+              <table class="logs-table">
+                <thead>
+                  <tr>
+                    <th>Timestamp</th>
+                    <th>Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${historyRowsHtml}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+  `;
+
+  const backBtn = rootEl.querySelector("[data-action='back-to-dashboard']");
+  if (backBtn) {
+    backBtn.addEventListener("click", () => {
+      setState({ viewingKpiId: null });
+    });
+  }
+
+  const logoutBtn = rootEl.querySelector("[data-action='logout']");
+  if (logoutBtn) {
+    logoutBtn.addEventListener("click", handleLogout);
+  }
 }
 
 function renderApp() {
   if (!appState.isAuthenticated) {
     renderLogin();
+  } else if (appState.viewingKpiId) {
+    renderKpiDetail();
   } else {
     renderDashboard();
   }
