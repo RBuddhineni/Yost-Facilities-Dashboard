@@ -6,7 +6,7 @@ const STORAGE_KEYS = {
 
 /** @type {HTMLElement | null} */
 const rootEl = document.getElementById("app-root");
-
+//app state
 let appState = {
   isAuthenticated: false,
   activeFormId: APP_CONFIG.forms[0]?.id ?? null,
@@ -181,18 +181,16 @@ async function fetchSheet(formConfig) {
         {
           timestamp: now.toISOString(),
           iceTemperature: 22.4,
-          attendance: 186,
-          eventsScheduled: 3,
-          maintenanceStatus: "Clear",
-          notes: "All systems nominal.",
+          iceDepth: 1.5,
+          eventattendance: 186,
+          therapyPoolSum: "All systems operational",
         },
         {
           timestamp: new Date(now.getTime() - 60 * 60 * 1000).toISOString(),
           iceTemperature: 23.1,
-          attendance: 142,
-          eventsScheduled: 2,
-          maintenanceStatus: "Clear",
-          notes: "",
+          iceDepth: 1.4,
+          eventattendance: 142,
+          therapyPoolSum: "Normal operations",
         },
       ];
     }

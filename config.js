@@ -17,16 +17,15 @@ export const APP_CONFIG = {
       label: "Daily Operations",
       // Replace this with your published Google Sheet JSON endpoint.
       // For development you can leave as null and the app will show mock data.
-      sheetJsonUrl: null,
+      sheetJsonUrl: "https://script.google.com/macros/library/d/1hqYC3aRr04AlGKXqtPX6H4oZMd-ZtpskfXTNxi63VyBUvi_iobpz3m4Q/1",
 
       // Column mappings: keys used by the dashboard -> column header in the Sheet
       columns: {
         timestamp: "Timestamp",
-        iceTemperature: "Ice Temperature (°F)",
-        attendance: "Attendance",
-        eventsScheduled: "Events Scheduled",
-        maintenanceStatus: "Maintenance Status",
-        notes: "Notes",
+        iceTemperature: "Ice Temperature",
+        iceDepth: "Ice Depth",
+        eventattendance: "Event Attendance",
+        therapyPoolSum: "Therapy Pool Summary",
       },
 
       // KPI cards to show for this form. You can add/remove items here.
@@ -41,23 +40,24 @@ export const APP_CONFIG = {
           goodRange: { min: 20, max: 24 },
         },
         {
-          id: "attendance",
-          label: "Attendance",
-          columnKey: "attendance",
+          id: "ice-depth",
+          label: "Ice Depth",
+          columnKey: "iceDepth",
+          unit: "inches",
+          format: "number",
+          decimals: 1,
+        },
+        {
+          id: "event-attendance",
+          label: "Event Attendance",
+          columnKey: "eventattendance",
           unit: "people",
           format: "integer",
         },
         {
-          id: "events",
-          label: "Events Scheduled",
-          columnKey: "eventsScheduled",
-          unit: "",
-          format: "integer",
-        },
-        {
-          id: "maintenance",
-          label: "Maintenance Status",
-          columnKey: "maintenanceStatus",
+          id: "therapy-pool",
+          label: "Therapy Pool Summary",
+          columnKey: "therapyPoolSum",
           format: "string",
         },
       ],
