@@ -346,11 +346,13 @@ body {
   border-radius: 12px;
   border: 1px solid #e5e7eb;
   background: #f9fafb;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .logs-table {
   width: 100%;
+  min-width: 800px;
   border-collapse: collapse;
   font-size: 13px;
 }

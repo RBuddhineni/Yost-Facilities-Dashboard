@@ -1,67 +1,154 @@
-// Simple configuration for Google Sheets-backed forms and KPIs.
-// You can edit this file to add/remove forms, change KPI names,
-// and update column mappings without touching the main app logic.
+// Configuration for the four sector Google Sheets.
+// Column keys map to internal keys; values are the exact header text from each sheet.
 
 export const APP_CONFIG = {
-  // Hardcoded shared password for the simple login gate.
-  // Change this to whatever you like.
   loginPassword: "yost-ice-2025",
 
-  // How often to refresh data (in milliseconds)
-  refreshIntervalMs: 3 * 60 * 1000, // 3 minutes
+  refreshIntervalMs: 5 * 60 * 1000, // 5 minutes
 
-  // List of Google Forms / Sheets "sources" that drive the dashboard.
+  // Fetch Google Apps Script URLs directly from the browser.
+  // If you ever hit CORS issues, you can optionally set this to a proxy URL
+  // (e.g. "https://corsproxy.io/?") and the app will route requests through it.
+  corsProxy: null,
+
   forms: [
     {
-      id: "daily-ops",
-      label: "Daily Operations",
-      // Replace this with your published Google Sheet JSON endpoint.
-      // For development you can leave as null and the app will show mock data.
-      sheetJsonUrl: "https://script.google.com/macros/s/AKfycbwHU5OJBNCi2VdF7BsMpX6lUflqhQVfRSD9dbqOH5Y3kmBH4qAmVzz9yJ4NyUjw-gxDuQ/exec",
-
-      // Column mappings: keys used by the dashboard -> column header in the Sheet
+      id: "ice-quality-reports",
+      label: "Ice Quality Reports",
+      sheetJsonUrl:
+        "https://script.google.com/macros/s/AKfycbzGtHpFS_mgijUzPIzrbTY4aK2bu3l42Ysv_Ml9X7dG0efMs6WKbJrVkrdWdMTzE2HEsQ/exec",
       columns: {
         timestamp: "Timestamp",
-        iceTemperature: "Ice Temperature",
-        iceDepth: "Ice Depth",
-        eventattendance: "Event Attendance",
-        therapyPoolSum: "Therapy Pool Summary",
+        date: "Date",
+        name: "Name",
+        humidity: "Humidity",
+        airTemperature: "Air Temperature",
+        surfaceTemperature: "Surface Temperature",
+        waterTemp: "Water Temp",
+        setPoint: "Set Point",
+        slabTemperature: "Slab Temperature",
+        supplyTemperature: "Supply Temperature",
+        returnTemperature: "Return Temperature",
+        notes: "Notes",
+        time: "Time",
+        outsideAirTemp: "Outside Air Temp",
+        outsideRelHumidity: "Outside Relative Humidity",
+        avgIceSurfaceTemp: "Avg Ice Surface Temp",
+        avgHumidity: "Avg Humidity",
+        avgAirTemp: "Avg Air Temp",
+        diffSlabSurface: "Diff slab and surface temp",
+        dewPoint: "Dew Point (ideal is 35-40)",
+        avgDewPointMonth: "AVG Dew Point per Month",
       },
-
-      // KPI cards to show for this form. You can add/remove items here.
       kpis: [
-        {
-          id: "ice-temperature",
-          label: "Ice Temperature",
-          columnKey: "iceTemperature",
-          unit: "°F",
-          format: "number",
-          decimals: 1,
-          goodRange: { min: 20, max: 24 },
-        },
-        {
-          id: "ice-depth",
-          label: "Ice Depth",
-          columnKey: "iceDepth",
-          unit: "inches",
-          format: "number",
-          decimals: 1,
-        },
-        {
-          id: "event-attendance",
-          label: "Event Attendance",
-          columnKey: "eventattendance",
-          unit: "people",
-          format: "integer",
-        },
-        {
-          id: "therapy-pool",
-          label: "Therapy Pool Summary",
-          columnKey: "therapyPoolSum",
-          format: "string",
-        },
+        { id: "last-check", label: "Last check", columnKey: "timestamp", format: "string" },
+        { id: "surface-temp", label: "Surface temp", columnKey: "surfaceTemperature", format: "number" },
+        { id: "humidity", label: "Humidity", columnKey: "humidity", format: "number" },
+        { id: "notes", label: "Notes", columnKey: "notes", format: "string" },
+      ],
+    },
+    {
+      id: "softball-therapy-pool",
+      label: "Softball Therapy Pool Checks",
+      sheetJsonUrl:
+        "https://script.google.com/macros/s/AKfycbydNaBif8DGS-j9XzVs7u-5UIgY9MRN9fRZFDVB4ve9apeBcUE7CCAzsVwojUIZ8ywv/exec",
+      columns: {
+        timestamp: "Timestamp",
+        date: "DATE",
+        time: "TIME",
+        name: "Name",
+        chlorineHot: "Chlorine (Hot Tub)",
+        chlorineCold: "Chlorine (Cold Tub)",
+        pHHot: "pH (Hot Tub)",
+        pHCold: "pH (Cold Tub)",
+        alkalinityHot: "Alkalinity (Hot Tub)",
+        alkalinityCold: "Alkalinity (Cold Tub)",
+        calciumHot: "Calcium Hardness (Hot Tub)",
+        calciumCold: "Calcium Hardness (Cold Tub)",
+        tempHot: "Temperature (Hot Tub)",
+        tempCold: "Temperature (Cold Tub)",
+        orpHot: "ORP (mV) (Hot Tub)",
+        orpCold: "ORP (mV) (Cold Tub)",
+        tdsHot: "TDS Level (Hot Tub)",
+        tdsCold: "TDS Level (Cold Tub)",
+        readings: "Readings",
+        shock: "Shock? ",
+        drainClean: "Drain/Clean?",
+        comments: "Comments",
+      },
+      kpis: [
+        { id: "last-check", label: "Last check", columnKey: "timestamp", format: "string" },
+        { id: "chlorine-hot", label: "Chlorine (hot)", columnKey: "chlorineHot", format: "number" },
+        { id: "chlorine-cold", label: "Chlorine (cold)", columnKey: "chlorineCold", format: "number" },
+        { id: "comments", label: "Comments", columnKey: "comments", format: "string" },
+      ],
+    },
+    {
+      id: "fisher-therapy-pool",
+      label: "Fisher Therapy Pool Checks",
+      sheetJsonUrl:
+        "https://script.google.com/macros/s/AKfycbzrj4iDt5ljiSJs-j-9tO8xjqwiFp7j6kAfNUW6cIT-myoQD9mHu9Yx7_jaSCwxfjjl/exec",
+      columns: {
+        timestamp: "Timestamp",
+        date: "Date",
+        time: "Time",
+        name: "Name",
+        bromine: "Bromine",
+        pH: "pH",
+        alkalinity: "Alkalinity",
+        calciumHardness: "Calcium Hardness",
+        temperature: "Temperature",
+        orp: "ORP (mV)",
+        tds: "TDS Level",
+        readings: "Readings",
+        shock: "Shock? ",
+        drainClean: "Drain/Clean?",
+        comments: "Comments",
+      },
+      kpis: [
+        { id: "last-check", label: "Last check", columnKey: "timestamp", format: "string" },
+        { id: "bromine", label: "Bromine", columnKey: "bromine", format: "number" },
+        { id: "temperature", label: "Temperature", columnKey: "temperature", format: "number" },
+        { id: "comments", label: "Comments", columnKey: "comments", format: "string" },
+      ],
+    },
+    {
+      id: "yost-ice-depth",
+      label: "Yost Ice Depth Checks",
+      sheetJsonUrl:
+        "https://script.google.com/macros/s/AKfycbyRwns4OrpmXePScYa5sr7rgF5tf3VjLETg8X_pH7MI5EZ1KU9UyJ79kJaASM4Ppgu3aA/exec",
+      columns: {
+        timestamp: "Timestamp",
+        date: "",
+        name: "Name",
+        threshold: "1 (Threshold)",
+        southGoal: "2 (South Goal)",
+        seCorner: "3 (SE Corner)",
+        seFaceoff: "4 (SE Faceoff Dot)",
+        swFaceoff: "5 (SW Faceoff Dot)",
+        southBluePenalty: "6 (South Blue Line Penalty Box)",
+        southBlueMiddle: "7 (South Blue Line Middle)",
+        southBlueBench: "8 (South Blue Line Bench)",
+        redLineBenches: "9 (Red Line Team Benches)",
+        centerIce: "10 (Center Ice)",
+        redLineScorer: "11 (Red Line Scorer's Bench)",
+        northBluePenalty: "12 (North Blue Line Penalty Box)",
+        northBlueMiddle: "13 (North Blue Line Middle)",
+        northBlueBench: "14 (North Blue Line Bench)",
+        neFaceoff: "15 (NE Faceoff Dot)",
+        nwFaceoff: "16 (NW Faceoff Dot)",
+        nwCorner: "17 (NW Corner)",
+        northGoal: "18 (North Goal)",
+        neCorner: "19 (NE Corner)",
+        avg: "AVG",
+        avgWithoutCorners: "AVG (w/o corners)",
+      },
+      kpis: [
+        { id: "last-check", label: "Last check", columnKey: "timestamp", format: "string" },
+        { id: "name", label: "Checked by", columnKey: "name", format: "string" },
+        { id: "avg", label: "Avg depth", columnKey: "avg", format: "number" },
+        { id: "center", label: "Center ice", columnKey: "centerIce", format: "number" },
       ],
     },
   ],
 };
-

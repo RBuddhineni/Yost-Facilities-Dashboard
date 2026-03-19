@@ -13,6 +13,8 @@ let appState = {
   lastRefresh: null,
   loading: false,
   error: null,
+  // Map<formId, string> for per-sector errors
+  errorsByForm: {},
   // Map<formId, array of rows>
   dataByForm: {},
   // KPI detail view state
@@ -98,7 +100,8 @@ function formatNumber(value, decimals) {
   if (value == null || value === "") return "—";
   const num = Number(value);
   if (Number.isNaN(num)) return String(value);
-  return num.toFixed(decimals ?? 0);
+  const places = decimals ?? 2;
+  return num.toFixed(places);
 }
 
 function coerceSheetRow(rawRow, columns) {
@@ -177,71 +180,64 @@ function normalizeSheetData(json) {
 
 async function fetchSheet(formConfig) {
   if (!formConfig.sheetJsonUrl) {
-    // Fallback: return simple mock data so UI can be seen without setup.
+    // Placeholder when no sheet is linked yet; replace sheetJsonUrl in config when ready.
     const now = new Date();
-    if (formConfig.id === "daily-ops") {
+    const sectorIds = [
+      "ice-quality-reports",
+      "softball-therapy-pool",
+      "fisher-therapy-pool",
+      "yost-ice-depth",
+    ];
+    if (sectorIds.includes(formConfig.id)) {
       return [
         {
           timestamp: now.toISOString(),
-          iceTemperature: 22.4,
-          iceDepth: 1.5,
-          eventattendance: 186,
-          therapyPoolSum: "All systems operational",
-        },
-        {
-          timestamp: new Date(now.getTime() - 60 * 60 * 1000).toISOString(),
-          iceTemperature: 23.1,
-          iceDepth: 1.4,
-          eventattendance: 142,
-          therapyPoolSum: "Normal operations",
-        },
-      ];
-    }
-    if (formConfig.id === "tournaments") {
-      return [
-        {
-          timestamp: now.toISOString(),
-          eventName: "Varsity Practice",
-          rink: "Main",
-          startTime: "6:00 PM",
-          endTime: "7:30 PM",
-          expectedAttendance: 40,
-          notes: "",
+          notes: "Connect a Google Sheet in config.js to see real data.",
         },
       ];
     }
     return [];
   }
 
+  const urlToFetch = APP_CONFIG.corsProxy
+    ? APP_CONFIG.corsProxy + encodeURIComponent(formConfig.sheetJsonUrl)
+    : formConfig.sheetJsonUrl;
+
   let resp;
   try {
-    resp = await fetch(formConfig.sheetJsonUrl, {
-      method: 'GET',
-      mode: 'cors',
-      cache: 'no-cache',
+    resp = await fetch(urlToFetch, {
+      method: "GET",
+      mode: "cors",
+      cache: "no-cache",
     });
   } catch (err) {
-    // Network error (CORS, connection failed, etc.)
-    const url = formConfig.sheetJsonUrl;
-    const isDevUrl = url && url.includes('/dev');
-    const suggestion = isDevUrl 
-      ? ' Try changing the URL from /dev to /exec in config.js, or redeploy your Apps Script with "Anyone" access.'
-      : ' Make sure your Apps Script is deployed with "Anyone" access (not "Anyone with Google account").';
-    
+    const suggestion = APP_CONFIG.corsProxy
+      ? " CORS proxy may be down; try again or set config.corsProxy to null and add .setHeader('Access-Control-Allow-Origin','*') in your Apps Script doGet."
+      : " Set config.corsProxy to 'https://corsproxy.io/?' to use a CORS proxy, or add .setHeader('Access-Control-Allow-Origin','*') in your Apps Script doGet.";
+    throw new Error(`[${formConfig.label}] Fetch failed: ${err.message}.${suggestion}`);
+  }
+
+  const text = await resp.text();
+  if (!resp.ok) {
+    const snippet = text.length > 200 ? text.slice(0, 200) + "…" : text;
+    const extraHelp =
+      resp.status === 403
+        ? " This Apps Script URL is returning 403 (forbidden). That means the Web App is NOT publicly accessible. In Apps Script: Deploy → Manage deployments → Edit → set 'Who has access' to 'Anyone' AND 'Execute as' to 'Me', then Deploy and use the updated /exec URL. If your org blocks 'Anyone', you'll need an internal proxy/backend instead."
+        : "";
     throw new Error(
-      `Failed to fetch data from Google Sheets. ${err.message}.${suggestion} Check browser console (F12) for details.`
+      `[${formConfig.label}] HTTP ${resp.status}. Response: ${snippet.replace(/\s+/g, " ")}.${extraHelp}`
     );
   }
-  
-  if (!resp.ok) {
-    throw new Error(`Failed to load data (HTTP ${resp.status})`);
-  }
-  
+
   let json;
   try {
-    json = await resp.json();
+    json = JSON.parse(text);
   } catch (err) {
-    throw new Error(`Invalid JSON response: ${err.message}`);
+    const isHtml = /^\s*</.test(text) || text.includes("<!DOCTYPE") || text.includes("<html");
+    const hint = isHtml
+      ? " Server returned HTML instead of JSON. In Apps Script: check for errors in the script editor, ensure doGet() returns JSON, and add .setHeader('Access-Control-Allow-Origin','*') on the response."
+      : ` Response: ${text.slice(0, 150)}…`;
+    throw new Error(`[${formConfig.label}] Invalid JSON.${hint}`);
   }
 
   // Normalize the JSON into a consistent array of row objects
@@ -250,47 +246,56 @@ async function fetchSheet(formConfig) {
   // Map column names from the sheet to our internal keys using the config
   const mappedRows = normalizedRows.map((row) => coerceSheetRow(row, formConfig.columns));
   
-  // Sort by timestamp descending (newest first) so KPI cards show the latest data
-  // If timestamp column exists, sort by it; otherwise keep original order
+  // Sort by timestamp descending (newest first), then keep only the 5 most recent
   if (mappedRows.length > 0 && mappedRows[0].timestamp) {
     mappedRows.sort((a, b) => {
       const timeA = new Date(a.timestamp).getTime();
       const timeB = new Date(b.timestamp).getTime();
-      // Descending order (newest first)
       return timeB - timeA;
     });
   }
-  
-  return mappedRows;
+
+  return mappedRows.slice(0, 5);
 }
 
 async function refreshAllData() {
-  // Safety: never fetch data when the user isn't authenticated
   if (!appState.isAuthenticated) return;
-  setState({ loading: true, error: null });
+  setState({ loading: true, error: null, errorsByForm: {} });
   const results = {};
-  try {
-    for (const form of APP_CONFIG.forms) {
-      // eslint-disable-next-line no-await-in-loop
+  const errors = [];
+  const errorsByForm = {};
+  const settled = await Promise.allSettled(
+    APP_CONFIG.forms.map(async (form) => {
       const rows = await fetchSheet(form);
-      results[form.id] = rows;
+      return { form, rows };
+    })
+  );
+  for (let i = 0; i < settled.length; i++) {
+    const form = APP_CONFIG.forms[i];
+    const outcome = settled[i];
+    if (outcome.status === "fulfilled") {
+      results[form.id] = outcome.value.rows;
+    } else {
+      results[form.id] = [];
+      const msg = outcome.reason?.message ?? String(outcome.reason);
+      errors.push(`${form.label}: ${msg}`);
+      errorsByForm[form.id] = msg;
+      console.error(`[${form.label}]`, outcome.reason);
     }
-    setState({
-      dataByForm: results,
-      lastRefresh: new Date().toISOString(),
-      loading: false,
-      error: null,
-    });
-  } catch (err) {
-    console.error(err);
-    setState({
-      loading: false,
-      error:
-        err && typeof err.message === "string"
-          ? err.message
-          : "Unable to load data.",
-    });
   }
+  const errorMessage =
+    errors.length > 0
+      ? errors.length === APP_CONFIG.forms.length
+        ? "All sectors failed to load. " + errors[0]
+        : `Some sectors failed (${errors.length}/${APP_CONFIG.forms.length}): ${errors.join("; ")}`
+      : null;
+  setState({
+    dataByForm: results,
+    lastRefresh: new Date().toISOString(),
+    loading: false,
+    error: errorMessage,
+    errorsByForm,
+  });
 }
 
 let refreshTimerId = null;
@@ -324,7 +329,7 @@ function computeKpiValue(kpi, rows) {
     case "integer":
       return { display: formatNumber(raw, 0), badge: null };
     case "number":
-      return { display: formatNumber(raw, kpi.decimals ?? 1), badge: null };
+      return { display: formatNumber(raw, kpi.decimals ?? 2), badge: null };
     case "count": {
       return { display: String(rows.length), badge: null };
     }
@@ -361,7 +366,7 @@ function renderLogin() {
         <div class="login-wrapper">
           <div class="brand-mark">Y</div>
           <div class="login-title">Yost Facilities</div>
-          <div class="login-subtitle">Ice Rink Operations Dashboard</div>
+          <div class="login-subtitle">Facilities Dashboard</div>
 
           <form id="login-form">
             <div class="form-field">
@@ -497,13 +502,17 @@ function renderDashboard() {
     const order = Object.keys(cols);
 
     return activeFormRows
-      .slice(0, 25)
+      .slice(0, 5)
       .map((row) => {
         const cells = order
           .map((key) => {
             let value = row[key];
             if (key === "timestamp") {
               value = formatTimestamp(value);
+            }
+            // For numeric sheet values, format to 2 decimal places to match sheet display
+            if (value != null && value !== "" && typeof value === "number") {
+              value = formatNumber(value, 2);
             }
             if (value == null || value === "") {
               value = "—";
@@ -516,10 +525,12 @@ function renderDashboard() {
       .join("");
   })();
 
-  const errorBanner = appState.error
+  const activeFormError =
+    appState.errorsByForm && activeForm ? appState.errorsByForm[activeForm.id] : null;
+  const errorBanner = activeFormError
     ? `<div class="logs-empty" style="background:#fef2f2;color:#991b1b;border-bottom:1px solid #fecaca;padding:16px;margin-bottom:16px;border-radius:8px;">
-         <strong>⚠️ Error loading data:</strong><br>
-         ${appState.error}
+         <strong>⚠️ Error loading data for ${activeForm.label}:</strong><br>
+         ${activeFormError}
        </div>`
     : "";
 
@@ -532,7 +543,7 @@ function renderDashboard() {
             <div class="header-title-group">
               <div class="header-title">Yost Facilities</div>
               <div class="header-subtitle">
-                Ice Rink Operations Dashboard
+                Facilities Dashboard
               </div>
             </div>
           </div>
@@ -545,7 +556,7 @@ function renderDashboard() {
               <div>
                 <div class="section-title">Key Metrics</div>
                 <div class="section-subtitle">
-                  Snapshot from latest submissions
+                  5 most recent submissions per sector
                 </div>
               </div>
               ${formSwitcherHtml}
@@ -663,7 +674,7 @@ function renderKpiDetail() {
       case "integer":
         return formatNumber(val, 0);
       case "number":
-        return formatNumber(val, kpi.decimals ?? 1);
+        return formatNumber(val, kpi.decimals ?? 2);
       case "string":
         return String(val);
       default:
