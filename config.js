@@ -9,7 +9,7 @@ export const APP_CONFIG = {
   // Fetch Google Apps Script URLs directly from the browser.
   // If you ever hit CORS issues, you can optionally set this to a proxy URL
   // (e.g. "https://corsproxy.io/?") and the app will route requests through it.
-  corsProxy: null,
+  corsProxy: "https://corsproxy.io/?",
 
   forms: [
     {
