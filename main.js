@@ -96,6 +96,27 @@ function formatTimestamp(isoOrValue) {
   });
 }
 
+function formatDateOnly(isoOrValue) {
+  if (!isoOrValue) return "—";
+  const date = new Date(isoOrValue);
+  if (Number.isNaN(date.getTime())) return String(isoOrValue);
+  return date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function formatTimeOnly(isoOrValue) {
+  if (!isoOrValue) return "—";
+  const date = new Date(isoOrValue);
+  if (Number.isNaN(date.getTime())) return String(isoOrValue);
+  return date.toLocaleTimeString(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function formatNumber(value, decimals) {
   if (value == null || value === "") return "—";
   const num = Number(value);
@@ -199,8 +220,9 @@ async function fetchSheet(formConfig) {
     return [];
   }
 
-  const urlToFetch = APP_CONFIG.corsProxy
-    ? APP_CONFIG.corsProxy + encodeURIComponent(formConfig.sheetJsonUrl)
+  const proxyUrl = formConfig.corsProxy ?? APP_CONFIG.corsProxy;
+  const urlToFetch = proxyUrl
+    ? proxyUrl + encodeURIComponent(formConfig.sheetJsonUrl)
     : formConfig.sheetJsonUrl;
 
   let resp;
@@ -332,6 +354,10 @@ function computeKpiValue(kpi, rows) {
       return { display: formatNumber(raw, kpi.decimals ?? 2), badge: null };
     case "count": {
       return { display: String(rows.length), badge: null };
+    }
+    case "timestamp": {
+      const text = raw == null || raw === "" ? "—" : formatTimestamp(raw);
+      return { display: text, badge: null };
     }
     case "string": {
       const text = raw == null || raw === "" ? "—" : String(raw);
@@ -488,7 +514,7 @@ function renderDashboard() {
 
   const tableHeaders = (() => {
     const cols = activeForm.columns;
-    const order = Object.keys(cols);
+    const order = Object.keys(cols).filter((key) => cols[key] !== "");
     return order
       .map((key) => `<th>${cols[key]}</th>`)
       .join("");
@@ -499,7 +525,7 @@ function renderDashboard() {
       return `<tr><td colspan="99" class="logs-empty">No recent submissions found.</td></tr>`;
     }
     const cols = activeForm.columns;
-    const order = Object.keys(cols);
+    const order = Object.keys(cols).filter((key) => cols[key] !== "");
 
     return activeFormRows
       .slice(0, 5)
@@ -509,6 +535,10 @@ function renderDashboard() {
             let value = row[key];
             if (key === "timestamp") {
               value = formatTimestamp(value);
+            } else if (key === "date") {
+              value = formatDateOnly(value);
+            } else if (key === "time") {
+              value = formatTimeOnly(value);
             }
             // For numeric sheet values, format to 2 decimal places to match sheet display
             if (value != null && value !== "" && typeof value === "number") {

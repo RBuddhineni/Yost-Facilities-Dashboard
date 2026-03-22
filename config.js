@@ -41,7 +41,7 @@ export const APP_CONFIG = {
         avgDewPointMonth: "AVG Dew Point per Month",
       },
       kpis: [
-        { id: "last-check", label: "Last check", columnKey: "timestamp", format: "string" },
+        { id: "last-check", label: "Last check", columnKey: "timestamp", format: "timestamp" },
         { id: "surface-temp", label: "Surface temp", columnKey: "surfaceTemperature", format: "number" },
         { id: "humidity", label: "Humidity", columnKey: "humidity", format: "number" },
         { id: "notes", label: "Notes", columnKey: "notes", format: "string" },
@@ -77,7 +77,7 @@ export const APP_CONFIG = {
         comments: "Comments",
       },
       kpis: [
-        { id: "last-check", label: "Last check", columnKey: "timestamp", format: "string" },
+        { id: "last-check", label: "Last check", columnKey: "timestamp", format: "timestamp" },
         { id: "chlorine-hot", label: "Chlorine (hot)", columnKey: "chlorineHot", format: "number" },
         { id: "chlorine-cold", label: "Chlorine (cold)", columnKey: "chlorineCold", format: "number" },
         { id: "comments", label: "Comments", columnKey: "comments", format: "string" },
@@ -88,6 +88,7 @@ export const APP_CONFIG = {
       label: "Fisher Therapy Pool Checks",
       sheetJsonUrl:
         "https://script.google.com/macros/s/AKfycbzrj4iDt5ljiSJs-j-9tO8xjqwiFp7j6kAfNUW6cIT-myoQD9mHu9Yx7_jaSCwxfjjl/exec",
+      corsProxy: "https://corsproxy.io/?",
       columns: {
         timestamp: "Timestamp",
         date: "Date",
@@ -106,7 +107,7 @@ export const APP_CONFIG = {
         comments: "Comments",
       },
       kpis: [
-        { id: "last-check", label: "Last check", columnKey: "timestamp", format: "string" },
+        { id: "last-check", label: "Last check", columnKey: "timestamp", format: "timestamp" },
         { id: "bromine", label: "Bromine", columnKey: "bromine", format: "number" },
         { id: "temperature", label: "Temperature", columnKey: "temperature", format: "number" },
         { id: "comments", label: "Comments", columnKey: "comments", format: "string" },
@@ -144,7 +145,7 @@ export const APP_CONFIG = {
         avgWithoutCorners: "AVG (w/o corners)",
       },
       kpis: [
-        { id: "last-check", label: "Last check", columnKey: "timestamp", format: "string" },
+        { id: "last-check", label: "Last check", columnKey: "timestamp", format: "timestamp" },
         { id: "name", label: "Checked by", columnKey: "name", format: "string" },
         { id: "avg", label: "Avg depth", columnKey: "avg", format: "number" },
         { id: "center", label: "Center ice", columnKey: "centerIce", format: "number" },
