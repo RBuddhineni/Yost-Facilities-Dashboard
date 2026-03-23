@@ -6,19 +6,16 @@ const STORAGE_KEYS = {
 
 /** @type {HTMLElement | null} */
 const rootEl = document.getElementById("app-root");
-//app state
+
 let appState = {
   isAuthenticated: false,
-  activeFormId: APP_CONFIG.forms[0]?.id ?? null,
+  activeSectorId: null,  // null = overview, string = sector detail view
+  timeFilter: "monthly", // "weekly" | "monthly" | "all"
   lastRefresh: null,
   loading: false,
   error: null,
-  // Map<formId, string> for per-sector errors
   errorsByForm: {},
-  // Map<formId, array of rows>
   dataByForm: {},
-  // KPI detail view state
-  viewingKpiId: null, // When set, shows detail view for this KPI
 };
 
 function loadSession() {
@@ -79,7 +76,7 @@ function handleLogout() {
   appState.lastRefresh = null;
   appState.loading = false;
   appState.error = null;
-  appState.viewingKpiId = null;
+  appState.activeSectorId = null;
   saveSession();
   renderApp();
 }
@@ -91,6 +88,27 @@ function formatTimestamp(isoOrValue) {
   return date.toLocaleString(undefined, {
     month: "short",
     day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function formatDateOnly(isoOrValue) {
+  if (!isoOrValue) return "—";
+  const date = new Date(isoOrValue);
+  if (Number.isNaN(date.getTime())) return String(isoOrValue);
+  return date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function formatTimeOnly(isoOrValue) {
+  if (!isoOrValue) return "—";
+  const date = new Date(isoOrValue);
+  if (Number.isNaN(date.getTime())) return String(isoOrValue);
+  return date.toLocaleTimeString(undefined, {
     hour: "2-digit",
     minute: "2-digit",
   });
@@ -114,19 +132,10 @@ function coerceSheetRow(rawRow, columns) {
 
 /**
  * Normalizes various Google Sheets JSON formats into a consistent array of row objects.
- * Handles multiple common formats:
- * - Direct array of objects: [{col1: val1, col2: val2}, ...]
- * - Object with rows: {rows: [{col1: val1}, ...]}
- * - Object with values (2D array): {values: [["header1", "header2"], ["val1", "val2"], ...]}
- * - CSV-like array of arrays: [["header1", "header2"], ["val1", "val2"], ...]
- * - Object with feed (older format): {feed: {...}}
  */
 function normalizeSheetData(json) {
-  // Case 1: Already an array
   if (Array.isArray(json)) {
-    // Check if it's an array of arrays (CSV-like format)
     if (json.length > 0 && Array.isArray(json[0])) {
-      // First row is headers, rest are data rows
       const [headers, ...dataRows] = json;
       return dataRows.map((row) => {
         const obj = {};
@@ -138,22 +147,14 @@ function normalizeSheetData(json) {
         return obj;
       });
     }
-    // Array of objects - return as-is
     return json;
   }
 
-  // Case 2: Object with various properties
   if (json && typeof json === "object") {
-    // Try common property names
-    if (Array.isArray(json.rows)) {
-      return json.rows;
-    }
+    if (Array.isArray(json.rows)) return json.rows;
     if (Array.isArray(json.values)) {
-      // Google Sheets API format: 2D array where first row is headers
       const [headers, ...dataRows] = json.values;
-      if (!headers || !Array.isArray(headers)) {
-        return [];
-      }
+      if (!headers || !Array.isArray(headers)) return [];
       return dataRows.map((row) => {
         const obj = {};
         headers.forEach((header, idx) => {
@@ -164,23 +165,15 @@ function normalizeSheetData(json) {
         return obj;
       });
     }
-    if (Array.isArray(json.data)) {
-      return json.data;
-    }
-    if (json.feed && json.feed.entry) {
-      // Older Google Sheets format - would need more parsing, but return empty for now
-      // You can extend this if needed
-      return [];
-    }
+    if (Array.isArray(json.data)) return json.data;
+    if (json.feed && json.feed.entry) return [];
   }
 
-  // Fallback: empty array
   return [];
 }
 
 async function fetchSheet(formConfig) {
   if (!formConfig.sheetJsonUrl) {
-    // Placeholder when no sheet is linked yet; replace sheetJsonUrl in config when ready.
     const now = new Date();
     const sectorIds = [
       "ice-quality-reports",
@@ -199,8 +192,9 @@ async function fetchSheet(formConfig) {
     return [];
   }
 
-  const urlToFetch = APP_CONFIG.corsProxy
-    ? APP_CONFIG.corsProxy + encodeURIComponent(formConfig.sheetJsonUrl)
+  const proxyUrl = formConfig.corsProxy ?? APP_CONFIG.corsProxy;
+  const urlToFetch = proxyUrl
+    ? proxyUrl + encodeURIComponent(formConfig.sheetJsonUrl)
     : formConfig.sheetJsonUrl;
 
   let resp;
@@ -222,7 +216,7 @@ async function fetchSheet(formConfig) {
     const snippet = text.length > 200 ? text.slice(0, 200) + "…" : text;
     const extraHelp =
       resp.status === 403
-        ? " This Apps Script URL is returning 403 (forbidden). That means the Web App is NOT publicly accessible. In Apps Script: Deploy → Manage deployments → Edit → set 'Who has access' to 'Anyone' AND 'Execute as' to 'Me', then Deploy and use the updated /exec URL. If your org blocks 'Anyone', you'll need an internal proxy/backend instead."
+        ? " This Apps Script URL is returning 403 (forbidden). That means the Web App is NOT publicly accessible. In Apps Script: Deploy → Manage deployments → Edit → set 'Who has access' to 'Anyone' AND 'Execute as' to 'Me', then Deploy and use the updated /exec URL."
         : "";
     throw new Error(
       `[${formConfig.label}] HTTP ${resp.status}. Response: ${snippet.replace(/\s+/g, " ")}.${extraHelp}`
@@ -240,13 +234,9 @@ async function fetchSheet(formConfig) {
     throw new Error(`[${formConfig.label}] Invalid JSON.${hint}`);
   }
 
-  // Normalize the JSON into a consistent array of row objects
   const normalizedRows = normalizeSheetData(json);
-  
-  // Map column names from the sheet to our internal keys using the config
   const mappedRows = normalizedRows.map((row) => coerceSheetRow(row, formConfig.columns));
-  
-  // Sort by timestamp descending (newest first), then keep only the 5 most recent
+
   if (mappedRows.length > 0 && mappedRows[0].timestamp) {
     mappedRows.sort((a, b) => {
       const timeA = new Date(a.timestamp).getTime();
@@ -255,7 +245,8 @@ async function fetchSheet(formConfig) {
     });
   }
 
-  return mappedRows.slice(0, 5);
+  // Return up to 50 rows so time-filtered views have enough data
+  return mappedRows.slice(0, 50);
 }
 
 async function refreshAllData() {
@@ -301,13 +292,8 @@ async function refreshAllData() {
 let refreshTimerId = null;
 
 function ensureAutoRefresh() {
-  if (refreshTimerId != null) {
-    clearInterval(refreshTimerId);
-  }
-  refreshTimerId = window.setInterval(
-    refreshAllData,
-    APP_CONFIG.refreshIntervalMs
-  );
+  if (refreshTimerId != null) clearInterval(refreshTimerId);
+  refreshTimerId = window.setInterval(refreshAllData, APP_CONFIG.refreshIntervalMs);
 }
 
 function stopAutoRefresh() {
@@ -315,6 +301,35 @@ function stopAutoRefresh() {
     clearInterval(refreshTimerId);
     refreshTimerId = null;
   }
+}
+
+// --- Data helpers ---
+
+function filterRowsByTime(rows, filter) {
+  if (!Array.isArray(rows) || filter === "all") return rows;
+  const cutoff = new Date();
+  if (filter === "weekly") {
+    cutoff.setDate(cutoff.getDate() - 7);
+  } else if (filter === "monthly") {
+    cutoff.setDate(cutoff.getDate() - 30);
+  }
+  return rows.filter((row) => {
+    if (!row.timestamp) return false;
+    const t = new Date(row.timestamp);
+    return !isNaN(t.getTime()) && t >= cutoff;
+  });
+}
+
+function computeStats(values) {
+  const nums = values
+    .filter((v) => v != null && v !== "")
+    .map(Number)
+    .filter((n) => !isNaN(n));
+  if (nums.length === 0) return null;
+  nums.sort((a, b) => a - b);
+  const mid = Math.floor(nums.length / 2);
+  const median = nums.length % 2 === 0 ? (nums[mid - 1] + nums[mid]) / 2 : nums[mid];
+  return { median, min: nums[0], max: nums[nums.length - 1], count: nums.length };
 }
 
 function computeKpiValue(kpi, rows) {
@@ -330,8 +345,11 @@ function computeKpiValue(kpi, rows) {
       return { display: formatNumber(raw, 0), badge: null };
     case "number":
       return { display: formatNumber(raw, kpi.decimals ?? 2), badge: null };
-    case "count": {
+    case "count":
       return { display: String(rows.length), badge: null };
+    case "timestamp": {
+      const text = raw == null || raw === "" ? "—" : formatTimestamp(raw);
+      return { display: text, badge: null };
     }
     case "string": {
       const text = raw == null || raw === "" ? "—" : String(raw);
@@ -343,20 +361,81 @@ function computeKpiValue(kpi, rows) {
 }
 
 function getKpiBadge(kpi, rows) {
-  if (!kpi.goodRange || !Array.isArray(rows) || rows.length === 0) {
-    return null;
-  }
+  if (!kpi.goodRange || !Array.isArray(rows) || rows.length === 0) return null;
   const latest = rows[0];
   const raw = latest[kpi.columnKey];
   const value = Number(raw);
   if (Number.isNaN(value)) return null;
-
   const { min, max } = kpi.goodRange;
-  if (value >= min && value <= max) {
-    return { kind: "good", label: "Within target" };
-  }
+  if (value >= min && value <= max) return { kind: "good", label: "Within target" };
   return { kind: "bad", label: "Out of target" };
 }
+
+// --- Shared UI fragments ---
+
+function buildTimeFilterHtml() {
+  const opts = [
+    { key: "weekly", label: "Last 7 days" },
+    { key: "monthly", label: "Last 30 days" },
+    { key: "all", label: "All time" },
+  ];
+  return `
+    <div class="time-filter">
+      ${opts
+        .map(
+          (o) =>
+            `<button class="filter-btn ${appState.timeFilter === o.key ? "active" : ""}" data-filter="${o.key}">${o.label}</button>`
+        )
+        .join("")}
+    </div>
+  `;
+}
+
+function attachTimeFilterListeners() {
+  rootEl.querySelectorAll("[data-filter]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      setState({ timeFilter: btn.getAttribute("data-filter") });
+    });
+  });
+}
+
+function buildTableHtml(form, rows) {
+  const cols = form.columns;
+  const order = Object.keys(cols).filter((key) => cols[key] !== "");
+  const headers = order.map((key) => `<th>${cols[key]}</th>`).join("");
+
+  const bodyRows =
+    rows.length === 0
+      ? `<tr><td colspan="99" class="logs-empty">No entries in this time period.</td></tr>`
+      : rows
+          .slice(0, 25)
+          .map((row) => {
+            const cells = order
+              .map((key) => {
+                let value = row[key];
+                if (key === "timestamp") value = formatTimestamp(value);
+                else if (key === "date") value = formatDateOnly(value);
+                else if (key === "time") value = formatTimeOnly(value);
+                if (value != null && value !== "" && typeof value === "number") {
+                  value = formatNumber(value, 2);
+                }
+                if (value == null || value === "") value = "—";
+                return `<td>${value}</td>`;
+              })
+              .join("");
+            return `<tr>${cells}</tr>`;
+          })
+          .join("");
+
+  return `
+    <table class="logs-table">
+      <thead><tr>${headers}</tr></thead>
+      <tbody>${bodyRows}</tbody>
+    </table>
+  `;
+}
+
+// --- Views ---
 
 function renderLogin() {
   if (!rootEl) return;
@@ -397,140 +476,219 @@ function renderLogin() {
     </div>
   `;
 
-  const form = document.getElementById("login-form");
-  if (form) {
-    form.addEventListener("submit", handleLoginSubmit);
-  }
+  document.getElementById("login-form")?.addEventListener("submit", handleLoginSubmit);
 }
 
-function renderDashboard() {
+function renderOverview() {
   if (!rootEl) return;
 
-  const activeForm =
-    APP_CONFIG.forms.find((f) => f.id === appState.activeFormId) ??
-    APP_CONFIG.forms[0];
-  const activeFormRows = appState.dataByForm[activeForm?.id] ?? [];
-  const latestRow = activeFormRows[0] ?? null;
+  const filterLabel =
+    appState.timeFilter === "weekly"
+      ? "week"
+      : appState.timeFilter === "monthly"
+      ? "month"
+      : "total";
 
-  const actionsHtml = `
-    <div class="header-meta">
-      <div class="timestamp-pill">
-        <span class="status-dot"></span>
-        <span>
-          ${
-            appState.lastRefresh
-              ? `Updated ${formatTimestamp(appState.lastRefresh)}`
-              : "Waiting for first refresh"
-          }
-        </span>
-      </div>
-      <div class="flex-row">
-        <button class="secondary-button" data-action="manual-refresh">
-          &#x21bb; Refresh now
-        </button>
-        <button class="secondary-button" data-action="logout">
-          &#x274C; Log out
-        </button>
-      </div>
-    </div>
-  `;
+  const sectorCardsHtml = APP_CONFIG.forms
+    .map((form) => {
+      const rows = appState.dataByForm[form.id] ?? [];
+      const filteredRows = filterRowsByTime(rows, appState.timeFilter);
+      const latestRow = rows[0] ?? null;
+      const hasError = !!(appState.errorsByForm?.[form.id]);
 
-  const formSwitcherHtml = `
-    <div class="form-switcher">
-      ${APP_CONFIG.forms
-        .map((form) => {
-          const active = form.id === activeForm.id;
-          return `<button
-            class="form-switch-button ${active ? "active" : ""}"
-            data-form-id="${form.id}"
-          >
-            ${form.label}
-          </button>`;
-        })
-        .join("")}
-    </div>
-  `;
-
-  const kpiCardsHtml = activeForm.kpis
-    .map((kpi) => {
-      const { display } = computeKpiValue(kpi, activeFormRows);
-      const badge = getKpiBadge(kpi, activeFormRows);
-      const timestampDisplay = latestRow?.timestamp
+      const lastCheck = latestRow?.timestamp
         ? formatTimestamp(latestRow.timestamp)
         : "No recent entries";
 
-      const badgeHtml = badge
-        ? `<span class="kpi-badge ${badge.kind === "bad" ? "bad" : ""}">
-            ${badge.label}
-          </span>`
-        : "";
+      const kpiMinis = form.kpis
+        .filter((k) => k.id !== "last-check")
+        .slice(0, 3)
+        .map((kpi) => {
+          const { display } = computeKpiValue(kpi, rows);
+          return `
+            <div class="bubble-kpi">
+              <span class="bubble-kpi-label">${kpi.label}</span>
+              <span class="bubble-kpi-value">${display}</span>
+            </div>`;
+        })
+        .join("");
 
-      const unitHtml = kpi.unit
-        ? `<span class="kpi-unit">${kpi.unit}</span>`
-        : "";
+      const countText =
+        filteredRows.length > 0
+          ? `${filteredRows.length} entr${filteredRows.length === 1 ? "y" : "ies"} this ${filterLabel}`
+          : `No entries this ${filterLabel}`;
 
       return `
-        <div class="kpi-card" data-kpi-id="${kpi.id}" style="cursor: pointer;" title="Click to view historical data">
-          <div class="kpi-label">${kpi.label}</div>
-          <div class="kpi-value-row">
-            <div class="kpi-value">
-              ${display}${unitHtml}
-            </div>
-            ${badgeHtml}
+        <div class="sector-bubble" data-sector-id="${form.id}">
+          <div class="bubble-top">
+            <div class="bubble-title">${form.label}</div>
+            ${hasError ? `<span class="bubble-error-badge">⚠ Error</span>` : ""}
           </div>
-          <div class="kpi-meta">
-            Latest entry: ${timestampDisplay}
+          <div class="bubble-last-check">Last check: ${lastCheck}</div>
+          <div class="bubble-kpis">
+            ${kpiMinis || '<span class="muted" style="font-size:12px;">No data loaded</span>'}
           </div>
+          <div class="bubble-footer">
+            <span class="bubble-count ${filteredRows.length === 0 ? "muted" : ""}">${countText}</span>
+            <a class="sheet-link" href="${form.sheetUrl ?? "#"}" target="_blank" rel="noopener" onclick="event.stopPropagation()">(link here) ↗</a>
+          </div>
+          <button class="view-details-btn">View Details →</button>
         </div>
       `;
     })
     .join("");
 
-  const tableHeaders = (() => {
-    const cols = activeForm.columns;
-    const order = Object.keys(cols);
-    return order
-      .map((key) => `<th>${cols[key]}</th>`)
-      .join("");
-  })();
+  rootEl.innerHTML = `
+    <div class="app-shell">
+      <div class="app-container">
+        <header class="dashboard-header">
+          <div class="header-left">
+            <div class="brand-mark">Y</div>
+            <div class="header-title-group">
+              <div class="header-title">Yost Facilities</div>
+              <div class="header-subtitle">Facilities Dashboard</div>
+            </div>
+          </div>
+          <div class="header-meta">
+            <div class="timestamp-pill">
+              <span class="status-dot"></span>
+              <span>${
+                appState.lastRefresh
+                  ? `Updated ${formatTimestamp(appState.lastRefresh)}`
+                  : "Waiting for first refresh"
+              }</span>
+            </div>
+            <div class="flex-row">
+              <button class="secondary-button" data-action="manual-refresh">&#x21bb; Refresh now</button>
+              <button class="secondary-button" data-action="logout">&#x274C; Log out</button>
+            </div>
+          </div>
+        </header>
 
-  const tableRowsHtml = (() => {
-    if (!Array.isArray(activeFormRows) || activeFormRows.length === 0) {
-      return `<tr><td colspan="99" class="logs-empty">No recent submissions found.</td></tr>`;
-    }
-    const cols = activeForm.columns;
-    const order = Object.keys(cols);
+        <main class="dashboard-body">
+          <section>
+            <div class="section-header">
+              <div>
+                <div class="section-title">Dashboard Overview</div>
+                <div class="section-subtitle">Click a sector card to view details and logs</div>
+              </div>
+              ${buildTimeFilterHtml()}
+            </div>
+            <div class="sector-grid">
+              ${sectorCardsHtml}
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+  `;
 
-    return activeFormRows
-      .slice(0, 5)
-      .map((row) => {
-        const cells = order
-          .map((key) => {
-            let value = row[key];
-            if (key === "timestamp") {
-              value = formatTimestamp(value);
-            }
-            // For numeric sheet values, format to 2 decimal places to match sheet display
-            if (value != null && value !== "" && typeof value === "number") {
-              value = formatNumber(value, 2);
-            }
-            if (value == null || value === "") {
-              value = "—";
-            }
-            return `<td>${value}</td>`;
-          })
-          .join("");
-        return `<tr>${cells}</tr>`;
-      })
-      .join("");
-  })();
+  rootEl.querySelector("[data-action='logout']")?.addEventListener("click", handleLogout);
+  rootEl.querySelector("[data-action='manual-refresh']")?.addEventListener("click", refreshAllData);
+  attachTimeFilterListeners();
 
-  const activeFormError =
-    appState.errorsByForm && activeForm ? appState.errorsByForm[activeForm.id] : null;
-  const errorBanner = activeFormError
+  rootEl.querySelectorAll(".sector-bubble").forEach((bubble) => {
+    bubble.addEventListener("click", (e) => {
+      if (e.target.closest(".sheet-link")) return;
+      const sectorId = bubble.getAttribute("data-sector-id");
+      if (sectorId) setState({ activeSectorId: sectorId });
+    });
+  });
+}
+
+function renderSectorDetail() {
+  if (!rootEl) return;
+
+  const form = APP_CONFIG.forms.find((f) => f.id === appState.activeSectorId);
+  if (!form) {
+    setState({ activeSectorId: null });
+    return;
+  }
+
+  const allRows = appState.dataByForm[form.id] ?? [];
+  const filteredRows = filterRowsByTime(allRows, appState.timeFilter);
+  // For KPI display use filtered rows if available, otherwise fall back to all rows
+  const kpiRows = filteredRows.length > 0 ? filteredRows : allRows;
+  const hasError = !!(appState.errorsByForm?.[form.id]);
+
+  // KPI cards
+  const kpiCardsHtml = form.kpis
+    .map((kpi) => {
+      const { display } = computeKpiValue(kpi, kpiRows);
+      const badge = getKpiBadge(kpi, kpiRows);
+      const latestRow = kpiRows[0] ?? null;
+      const timestampDisplay = latestRow?.timestamp
+        ? formatTimestamp(latestRow.timestamp)
+        : "No recent entries";
+      const badgeHtml = badge
+        ? `<span class="kpi-badge ${badge.kind === "bad" ? "bad" : ""}">${badge.label}</span>`
+        : "";
+      return `
+        <div class="kpi-card">
+          <div class="kpi-label">${kpi.label}</div>
+          <div class="kpi-value-row">
+            <div class="kpi-value">${display}</div>
+            ${badgeHtml}
+          </div>
+          <div class="kpi-meta">Latest entry: ${timestampDisplay}</div>
+        </div>
+      `;
+    })
+    .join("");
+
+  // Stats section — only for numeric KPIs and when there are ≥2 filtered rows
+  const numericKpis = form.kpis.filter(
+    (k) => k.format === "number" || k.format === "integer"
+  );
+  const statsRows = filteredRows.length >= 2 ? filteredRows : [];
+  const statsHtml =
+    numericKpis.length > 0 && statsRows.length >= 2
+      ? `
+        <section>
+          <div class="section-header">
+            <div>
+              <div class="section-title">Statistics</div>
+              <div class="section-subtitle">
+                Over ${statsRows.length} entr${statsRows.length === 1 ? "y" : "ies"} in the selected period
+              </div>
+            </div>
+          </div>
+          <div class="stats-grid">
+            ${numericKpis
+              .map((kpi) => {
+                const values = statsRows.map((r) => r[kpi.columnKey]);
+                const stats = computeStats(values);
+                if (!stats) return "";
+                return `
+                  <div class="stat-card">
+                    <div class="stat-label">${kpi.label}</div>
+                    <div class="stat-row">
+                      <div class="stat-item">
+                        <div class="stat-item-label">Median</div>
+                        <div class="stat-item-value">${formatNumber(stats.median, kpi.decimals ?? 2)}</div>
+                      </div>
+                      <div class="stat-item">
+                        <div class="stat-item-label">Min</div>
+                        <div class="stat-item-value">${formatNumber(stats.min, kpi.decimals ?? 2)}</div>
+                      </div>
+                      <div class="stat-item">
+                        <div class="stat-item-label">Max</div>
+                        <div class="stat-item-value">${formatNumber(stats.max, kpi.decimals ?? 2)}</div>
+                      </div>
+                    </div>
+                  </div>
+                `;
+              })
+              .join("")}
+          </div>
+        </section>
+      `
+      : "";
+
+  const errorBanner = hasError
     ? `<div class="logs-empty" style="background:#fef2f2;color:#991b1b;border-bottom:1px solid #fecaca;padding:16px;margin-bottom:16px;border-radius:8px;">
-         <strong>⚠️ Error loading data for ${activeForm.label}:</strong><br>
-         ${activeFormError}
+         <strong>⚠️ Error loading data for ${form.label}:</strong><br>
+         ${appState.errorsByForm[form.id]}
        </div>`
     : "";
 
@@ -542,12 +700,16 @@ function renderDashboard() {
             <div class="brand-mark">Y</div>
             <div class="header-title-group">
               <div class="header-title">Yost Facilities</div>
-              <div class="header-subtitle">
-                Facilities Dashboard
-              </div>
+              <div class="header-subtitle">${form.label}</div>
             </div>
           </div>
-          ${actionsHtml}
+          <div class="header-meta">
+            <div class="flex-row">
+              <button class="secondary-button" data-action="back">← Overview</button>
+              <a href="${form.sheetUrl ?? "#"}" target="_blank" rel="noopener" class="secondary-button sheet-link-btn">(link here) ↗</a>
+              <button class="secondary-button" data-action="logout">&#x274C; Log out</button>
+            </div>
+          </div>
         </header>
 
         <main class="dashboard-body">
@@ -555,52 +717,33 @@ function renderDashboard() {
             <div class="section-header">
               <div>
                 <div class="section-title">Key Metrics</div>
-                <div class="section-subtitle">
-                  5 most recent submissions per sector
-                </div>
+                <div class="section-subtitle">Most recent values in selected period</div>
               </div>
-              ${formSwitcherHtml}
+              ${buildTimeFilterHtml()}
             </div>
-            <div class="kpi-grid">
-              ${kpiCardsHtml}
-            </div>
+            <div class="kpi-grid">${kpiCardsHtml}</div>
           </section>
 
+          ${statsHtml}
+
           <section>
-            <div class="section-header" style="margin-top:10px;">
+            <div class="section-header" style="margin-top:8px;">
               <div>
                 <div class="section-title">Recent Logs</div>
                 <div class="section-subtitle">
-                  Last 25 form submissions from
-                  <span class="pill">${activeForm.label}</span>
+                  From <span class="pill">${form.label}</span>
                 </div>
               </div>
               <div class="chip">
                 Showing
                 <span class="muted" style="margin-left:4px;">
-                  ${
-                    Array.isArray(activeFormRows)
-                      ? `${Math.min(
-                          activeFormRows.length,
-                          25
-                        )} of ${activeFormRows.length}`
-                      : "0"
-                  }
+                  ${Math.min(filteredRows.length, 25)} of ${filteredRows.length}
                 </span>
               </div>
             </div>
             <div class="table-container">
               ${errorBanner}
-              <table class="logs-table">
-                <thead>
-                  <tr>
-                    ${tableHeaders}
-                  </tr>
-                </thead>
-                <tbody>
-                  ${tableRowsHtml}
-                </tbody>
-              </table>
+              ${buildTableHtml(form, filteredRows)}
             </div>
           </section>
         </main>
@@ -609,187 +752,19 @@ function renderDashboard() {
   `;
 
   rootEl
-    .querySelectorAll("[data-form-id]")
-    .forEach((el) =>
-      el.addEventListener("click", () => {
-        const formId = el.getAttribute("data-form-id");
-        if (formId && formId !== appState.activeFormId) {
-          setState({ activeFormId: formId, viewingKpiId: null });
-        }
-      })
-    );
-
-  const logoutBtn = rootEl.querySelector("[data-action='logout']");
-  if (logoutBtn) {
-    logoutBtn.addEventListener("click", handleLogout);
-  }
-  const refreshBtn = rootEl.querySelector("[data-action='manual-refresh']");
-  if (refreshBtn) {
-    refreshBtn.addEventListener("click", () => {
-      refreshAllData();
-    });
-  }
-
-  // Add click handlers for KPI cards
-  rootEl
-    .querySelectorAll("[data-kpi-id]")
-    .forEach((el) =>
-      el.addEventListener("click", () => {
-        const kpiId = el.getAttribute("data-kpi-id");
-        if (kpiId) {
-          setState({ viewingKpiId: kpiId });
-        }
-      })
-    );
-}
-
-function renderKpiDetail() {
-  if (!rootEl) return;
-
-  const activeForm =
-    APP_CONFIG.forms.find((f) => f.id === appState.activeFormId) ??
-    APP_CONFIG.forms[0];
-  const activeFormRows = appState.dataByForm[activeForm?.id] ?? [];
-  const kpi = activeForm.kpis.find((k) => k.id === appState.viewingKpiId);
-
-  if (!kpi) {
-    // KPI not found, go back to dashboard
-    setState({ viewingKpiId: null });
-    return;
-  }
-
-  // Extract all values for this KPI with timestamps
-  const kpiHistory = activeFormRows
-    .map((row) => {
-      const value = row[kpi.columnKey];
-      const timestamp = row.timestamp;
-      return { value, timestamp };
-    })
-    .filter((entry) => entry.timestamp != null); // Only include entries with timestamps
-
-  // Format values based on KPI format
-  const formatValue = (val) => {
-    if (val == null || val === "") return "—";
-    switch (kpi.format) {
-      case "integer":
-        return formatNumber(val, 0);
-      case "number":
-        return formatNumber(val, kpi.decimals ?? 2);
-      case "string":
-        return String(val);
-      default:
-        return String(val);
-    }
-  };
-
-  const unitHtml = kpi.unit ? ` <span class="kpi-unit" style="font-size:0.9em;opacity:0.7;">${kpi.unit}</span>` : "";
-
-  const historyRowsHtml =
-    kpiHistory.length === 0
-      ? `<tr><td colspan="2" class="logs-empty">No historical data available.</td></tr>`
-      : kpiHistory
-          .map((entry) => {
-            const formattedValue = formatValue(entry.value);
-            const badgeHtml =
-              kpi.goodRange && !Number.isNaN(Number(entry.value))
-                ? (() => {
-                    const num = Number(entry.value);
-                    const inRange =
-                      num >= kpi.goodRange.min && num <= kpi.goodRange.max;
-                    return inRange
-                      ? '<span class="kpi-badge" style="margin-left:8px;">Within target</span>'
-                      : '<span class="kpi-badge bad" style="margin-left:8px;">Out of target</span>';
-                  })()
-                : "";
-            return `
-              <tr>
-                <td>${formatTimestamp(entry.timestamp)}</td>
-                <td style="font-weight:500;">
-                  ${formattedValue}${unitHtml}${badgeHtml}
-                </td>
-              </tr>
-            `;
-          })
-          .join("");
-
-  rootEl.innerHTML = `
-    <div class="app-shell">
-      <div class="app-container">
-        <header class="dashboard-header">
-          <div class="header-left">
-            <div class="brand-mark">Y</div>
-            <div class="header-title-group">
-              <div class="header-title">Yost Facilities</div>
-              <div class="header-subtitle">
-                ${kpi.label} - Historical Data
-              </div>
-            </div>
-          </div>
-          <div class="header-meta">
-            <button class="secondary-button" data-action="back-to-dashboard">
-              ← Back to Dashboard
-            </button>
-            <button class="secondary-button" data-action="logout">
-              &#x274C; Log out
-            </button>
-          </div>
-        </header>
-
-        <main class="dashboard-body">
-          <section>
-            <div class="section-header">
-              <div>
-                <div class="section-title">${kpi.label}</div>
-                <div class="section-subtitle">
-                  Historical values from ${activeForm.label}
-                </div>
-              </div>
-              <div class="chip">
-                Showing
-                <span class="muted" style="margin-left:4px;">
-                  ${kpiHistory.length} ${kpiHistory.length === 1 ? "entry" : "entries"}
-                </span>
-              </div>
-            </div>
-            <div class="table-container">
-              <table class="logs-table">
-                <thead>
-                  <tr>
-                    <th>Timestamp</th>
-                    <th>Value</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${historyRowsHtml}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        </main>
-      </div>
-    </div>
-  `;
-
-  const backBtn = rootEl.querySelector("[data-action='back-to-dashboard']");
-  if (backBtn) {
-    backBtn.addEventListener("click", () => {
-      setState({ viewingKpiId: null });
-    });
-  }
-
-  const logoutBtn = rootEl.querySelector("[data-action='logout']");
-  if (logoutBtn) {
-    logoutBtn.addEventListener("click", handleLogout);
-  }
+    .querySelector("[data-action='back']")
+    ?.addEventListener("click", () => setState({ activeSectorId: null }));
+  rootEl.querySelector("[data-action='logout']")?.addEventListener("click", handleLogout);
+  attachTimeFilterListeners();
 }
 
 function renderApp() {
   if (!appState.isAuthenticated) {
     renderLogin();
-  } else if (appState.viewingKpiId) {
-    renderKpiDetail();
+  } else if (appState.activeSectorId) {
+    renderSectorDetail();
   } else {
-    renderDashboard();
+    renderOverview();
   }
 }
 
@@ -803,4 +778,3 @@ function bootstrap() {
 }
 
 window.addEventListener("DOMContentLoaded", bootstrap);
-
