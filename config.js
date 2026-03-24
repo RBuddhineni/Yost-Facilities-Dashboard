@@ -80,8 +80,8 @@ export const APP_CONFIG = {
       },
       kpis: [
         { id: "last-check", label: "Last check", columnKey: "timestamp", format: "timestamp" },
-        { id: "chlorine-hot", label: "Chlorine (hot)", columnKey: "chlorineHot", format: "number" },
-        { id: "chlorine-cold", label: "Chlorine (cold)", columnKey: "chlorineCold", format: "number" },
+        { id: "chlorine-hot", label: "Hot Tub", columnKey: "chlorineHot", format: "number" },
+        { id: "chlorine-cold", label: "Cold Tub", columnKey: "chlorineCold", format: "number" },
         { id: "comments", label: "Comments", columnKey: "comments", format: "string" },
       ],
     },

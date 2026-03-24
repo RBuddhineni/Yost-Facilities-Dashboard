@@ -611,38 +611,61 @@ function renderSectorDetail() {
   const kpiRows = filteredRows.length > 0 ? filteredRows : allRows;
   const hasError = !!(appState.errorsByForm?.[form.id]);
 
-  // KPI cards
-  const kpiCardsHtml = form.kpis
-    .map((kpi) => {
-      const { display } = computeKpiValue(kpi, kpiRows);
-      const badge = getKpiBadge(kpi, kpiRows);
-      const latestRow = kpiRows[0] ?? null;
-      const timestampDisplay = latestRow?.timestamp
-        ? formatTimestamp(latestRow.timestamp)
-        : "No recent entries";
-      const badgeHtml = badge
-        ? `<span class="kpi-badge ${badge.kind === "bad" ? "bad" : ""}">${badge.label}</span>`
-        : "";
-      return `
+  // KPI cards — show all columns from the most recent row
+  const kpiCardsHtml = (() => {
+    const latestRow = kpiRows[0] ?? null;
+    if (!latestRow) {
+      return `<div class="kpi-card"><div class="kpi-label">No data</div><div class="kpi-value-row"><div class="kpi-value">—</div></div></div>`;
+    }
+    const timestampDisplay = latestRow.timestamp
+      ? formatTimestamp(latestRow.timestamp)
+      : "No recent entries";
+    const cards = [];
+
+    // Always show Last Check first
+    cards.push(`
+      <div class="kpi-card">
+        <div class="kpi-label">Last Check</div>
+        <div class="kpi-value-row"><div class="kpi-value">${timestampDisplay}</div></div>
+        <div class="kpi-meta">Latest entry: ${timestampDisplay}</div>
+      </div>
+    `);
+
+    for (const [key, label] of Object.entries(form.columns)) {
+      if (key === "timestamp" || label === "") continue;
+      // Skip redundant date/time columns (covered by timestamp)
+      if (key === "date" || key === "time") continue;
+      const val = latestRow[key];
+      if (val == null || val === "") continue;
+
+      let display;
+      const num = Number(val);
+      if (!isNaN(num) && String(val).trim() !== "") {
+        display = formatNumber(num, 2);
+      } else {
+        display = String(val);
+      }
+
+      cards.push(`
         <div class="kpi-card">
-          <div class="kpi-label">${kpi.label}</div>
-          <div class="kpi-value-row">
-            <div class="kpi-value">${display}</div>
-            ${badgeHtml}
-          </div>
+          <div class="kpi-label">${label}</div>
+          <div class="kpi-value-row"><div class="kpi-value">${display}</div></div>
           <div class="kpi-meta">Latest entry: ${timestampDisplay}</div>
         </div>
-      `;
-    })
-    .join("");
+      `);
+    }
+    return cards.join("");
+  })();
 
-  // Stats section — only for numeric KPIs and when there are ≥2 filtered rows
-  const numericKpis = form.kpis.filter(
-    (k) => k.format === "number" || k.format === "integer"
-  );
+  // Stats section — all numeric columns when there are ≥2 filtered rows
   const statsRows = filteredRows.length >= 2 ? filteredRows : [];
+  const allNumericCols = Object.entries(form.columns).filter(([key, label]) => {
+    if (label === "" || key === "timestamp" || key === "date" || key === "time") return false;
+    const vals = statsRows.slice(0, 10).map((r) => r[key]).filter((v) => v != null && v !== "");
+    return vals.length > 0 && vals.some((v) => !isNaN(Number(v)));
+  });
   const statsHtml =
-    numericKpis.length > 0 && statsRows.length >= 2
+    allNumericCols.length > 0 && statsRows.length >= 2
       ? `
         <section>
           <div class="section-header">
@@ -654,26 +677,26 @@ function renderSectorDetail() {
             </div>
           </div>
           <div class="stats-grid">
-            ${numericKpis
-              .map((kpi) => {
-                const values = statsRows.map((r) => r[kpi.columnKey]);
+            ${allNumericCols
+              .map(([key, label]) => {
+                const values = statsRows.map((r) => r[key]);
                 const stats = computeStats(values);
                 if (!stats) return "";
                 return `
                   <div class="stat-card">
-                    <div class="stat-label">${kpi.label}</div>
+                    <div class="stat-label">${label}</div>
                     <div class="stat-row">
                       <div class="stat-item">
                         <div class="stat-item-label">Median</div>
-                        <div class="stat-item-value">${formatNumber(stats.median, kpi.decimals ?? 2)}</div>
+                        <div class="stat-item-value">${formatNumber(stats.median, 2)}</div>
                       </div>
                       <div class="stat-item">
                         <div class="stat-item-label">Min</div>
-                        <div class="stat-item-value">${formatNumber(stats.min, kpi.decimals ?? 2)}</div>
+                        <div class="stat-item-value">${formatNumber(stats.min, 2)}</div>
                       </div>
                       <div class="stat-item">
                         <div class="stat-item-label">Max</div>
-                        <div class="stat-item-value">${formatNumber(stats.max, kpi.decimals ?? 2)}</div>
+                        <div class="stat-item-value">${formatNumber(stats.max, 2)}</div>
                       </div>
                     </div>
                   </div>
