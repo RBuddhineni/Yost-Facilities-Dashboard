@@ -90,7 +90,7 @@ export const APP_CONFIG = {
       label: "Fisher Therapy Pool Checks",
       sheetUrl: "(link here)",
       sheetJsonUrl:
-        "https://script.google.com/macros/s/AKfycbzrj4iDt5ljiSJs-j-9tO8xjqwiFp7j6kAfNUW6cIT-myoQD9mHu9Yx7_jaSCwxfjjl/exec",
+        "https://script.google.com/macros/s/AKfycbx7HJMz6_Qs3OmCAB1WSqs1bSEyUyRjcrNE1auGZ4ejioWoGLiS0JWW98LL3XE7my1V/exec",
       columns: {
         timestamp: "Timestamp",
         date: "Date",
