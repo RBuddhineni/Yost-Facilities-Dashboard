@@ -1,6 +1,6 @@
 # Yost Facilities Dashboard
 
-A live dashboard for Yost Facilities staff to monitor facility check-ins across four sectors: Ice Quality Reports, Softball Therapy Pool Checks, Fisher Therapy Pool Checks, and Yost Ice Depth Checks. Data is pulled automatically from Google Sheets — no manual data entry needed on the dashboard side.
+A live dashboard for Yost Facilities staff to monitor facility check-ins across multiple sectors. Data is pulled automatically from Google Sheets — no manual data entry needed on the dashboard side.
 
 ---
 
@@ -16,7 +16,7 @@ A live dashboard for Yost Facilities staff to monitor facility check-ins across 
   - [Running Locally](#running-locally)
   - [Connecting Google Sheets](#connecting-google-sheets)
   - [Deployment (Vercel)](#deployment-vercel)
-  - [Metrics by Sector](#metrics-by-sector)
+  - [Sector Column Mappings](#sector-column-mappings)
   - [Troubleshooting](#troubleshooting)
 
 ---
@@ -59,17 +59,10 @@ The dashboard is hosted on **Vercel**. If the site becomes unavailable:
 
 The dashboard reads directly from Google Sheets in real time. It does **not** store its own copy of the data. This means:
 
-- **To fix incorrect data:** Open the Google Sheet for that sector (links below), find the row with the wrong entry, and edit or delete it directly in the sheet. The dashboard will reflect the correction on its next refresh (within 5 minutes), or immediately if you click the refresh button.
+- **To fix incorrect data:** Open the Google Sheet for that sector, find the row with the wrong entry, and edit or delete it directly in the sheet. The dashboard will reflect the correction on its next refresh (within 5 minutes), or immediately if you click the refresh button.
 - **To remove a duplicate submission:** Delete the duplicate row from the Google Sheet.
 
-**Google Sheet links by sector:**
-
-| Sector | Google Sheet |
-|--------|-------------|
-| Ice Quality Reports | [Open Sheet](https://docs.google.com/spreadsheets/d/1uvyEJpFY8eGcuc6Gz22sZn6pnVxsZ1gElv8YMnzsSM4/edit) |
-| Softball Therapy Pool Checks | [Open Sheet](https://docs.google.com/spreadsheets/d/10XBiTfF0QTCC3znxr2nCdLM4nn0j29phQfbdmHbFeOA/edit) |
-| Fisher Therapy Pool Checks | [Open Sheet](https://docs.google.com/spreadsheets/d/1pdQTH-sbl41UA_yWMEWTyoGiruAqLVL61ym4ikHZ1Qk/edit) |
-| Yost Ice Depth Checks | [Open Sheet](https://docs.google.com/spreadsheets/d/15IEsNUxi_YsNDZMTRy3Pjqz7znd8QX9G5tO1fuj82wA/edit) |
+Each sector has a direct link to its Google Sheet — look for the **↗ link** button on the sector card in the dashboard, or find the URLs in `config.js` under each sector's `sheetUrl` field.
 
 > **Tip:** You'll need edit access to the Google Sheet to make changes. If you don't have access, contact whoever manages your Google Workspace.
 
@@ -124,7 +117,12 @@ Then open `http://localhost:4173` in your browser.
 
 ### Connecting Google Sheets
 
-Each sector pulls from a Google Sheet via a **Google Apps Script** web app URL. These URLs are already configured in `config.js` for the existing four sectors. If a sheet ever needs to be reconnected or a new sector added, follow these steps:
+Each sector on the dashboard maps to one Google Sheet (typically the response sheet from a Google Form). The connection is configured in `config.js` — one entry per sector in the `forms` array.
+
+**When to use this section:**
+- Reconnecting a sector whose Apps Script URL has expired or been deleted
+- Adding a brand new sector to the dashboard
+- Swapping out a sheet because the form was rebuilt
 
 #### Step 1 — Create or open the Google Sheet
 
@@ -169,9 +167,11 @@ function doGet() {
 4. Set type to **Web app**, execute as **Me**, access to **Anyone**.
 5. Click **Deploy** and copy the URL ending in `/exec`.
 
-#### Step 3 — Update `config.js`
+#### Step 3 — Add or update the sector in `config.js`
 
-Find the sector in the `forms` array (or add a new one) and set:
+Open `config.js` and find the `forms` array. Each object in that array is one sector. To **update an existing sector**, find it by its `id` and replace the relevant fields. To **add a new sector**, copy an existing entry and paste it as a new object at the end of the array (before the closing `]`).
+
+Each sector entry looks like this:
 
 ```javascript
 {
@@ -206,83 +206,13 @@ The project is deployed on Vercel via GitHub integration. Pushing to the `main` 
 
 ---
 
-### Metrics by Sector
+### Sector Column Mappings
 
-Each sector's Google Form writes one row per submission into its response sheet. Below is the full list of columns tracked per sector.
+Each sector's Google Form writes one row per submission into its response sheet. The dashboard reads those columns via the `columns` map in `config.js`.
 
-<details>
-<summary><strong>Ice Quality Reports</strong></summary>
+To see which columns are currently configured for each sector, open `config.js` and look at each sector's `columns` object — the values on the right side are the exact column headers from the corresponding Google Sheet.
 
-| Column header in sheet | Used as |
-|------------------------|---------|
-| Timestamp | Last submission time (KPI) |
-| Date | Report date |
-| Name | Who submitted |
-| Humidity | KPI |
-| Air Temperature | KPI |
-| Surface Temperature | KPI |
-| Water Temp | System setpoint |
-| Set Point | Target temp |
-| Slab Temperature | Sub-surface |
-| Supply Temperature | Chiller supply |
-| Return Temperature | Chiller return |
-| Notes | KPI |
-| Time | Time of reading |
-| Outside Air Temp | Ambient |
-| Outside Relative Humidity | Ambient |
-| Avg Ice Surface Temp | Computed average |
-| Avg Humidity | Computed average |
-| Avg Air Temp | Computed average |
-| Diff slab and surface temp | Delta |
-| Dew Point (ideal is 35-40) | Dew point |
-| AVG Dew Point per Month | Monthly average |
-
-</details>
-
-<details>
-<summary><strong>Softball Therapy Pool Checks</strong></summary>
-
-| Column header in sheet | Used as |
-|------------------------|---------|
-| Timestamp | Last check (KPI) |
-| DATE | Date of check |
-| TIME | Time of check |
-| Name | Who checked |
-| Chlorine (Hot Tub) | KPI |
-| Chlorine (Cold Tub) | KPI |
-| pH (Hot Tub) | KPI |
-| pH (Cold Tub) | KPI |
-| Alkalinity (Hot Tub / Cold Tub) | Logged |
-| Calcium Hardness (Hot Tub / Cold Tub) | Logged |
-| Temperature (Hot Tub / Cold Tub) | Logged |
-| ORP (mV) (Hot Tub / Cold Tub) | Oxidation-reduction |
-| TDS Level (Hot Tub / Cold Tub) | Total dissolved solids |
-| Readings | Source (e.g. "From Reader") |
-| Shock? | Yes/No |
-| Drain/Clean? | Yes/No |
-| Comments | KPI |
-
-</details>
-
-<details>
-<summary><strong>Fisher Therapy Pool Checks</strong></summary>
-
-Same structure as Softball Therapy Pool, but uses Bromine instead of Chlorine. If your form uses different headers, update `config.js` to match.
-
-</details>
-
-<details>
-<summary><strong>Yost Ice Depth Checks</strong></summary>
-
-| Column header in sheet | Used as |
-|------------------------|---------|
-| Timestamp | Last check (KPI) |
-| Name | Who checked (KPI) |
-| 1 (Threshold) through 19 (NE Corner) | Depth at each of 19 grid positions |
-| AVG | Average depth (KPI) |
-| AVG (w/o corners) | Average excluding corners (KPI) |
-
-</details>
+**Key rule:** if a column header ever changes in the Google Sheet (e.g. a form question is renamed), the matching value in `config.js` must be updated to reflect the new header exactly, including capitalization and spacing. The KPIs and table for that sector will stop populating until they match.
 
 ---
 
