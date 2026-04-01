@@ -1,173 +1,161 @@
-## Yost Facilities Dashboard
+# Yost Facilities Dashboard
 
-A lightweight, client-only dashboard for Yost Facilities staff to monitor facility check-ins. It aggregates data from four sectors (Ice Quality Reports, Softball Therapy Pool Checks, Fisher Therapy Pool Checks, Yost Ice Depth Checks) via published Google Sheets JSON endpoints; no backend or database is required.
+A live dashboard for Yost Facilities staff to monitor facility check-ins across four sectors: Ice Quality Reports, Softball Therapy Pool Checks, Fisher Therapy Pool Checks, and Yost Ice Depth Checks. Data is pulled automatically from Google Sheets — no manual data entry needed on the dashboard side.
 
-### Features
+---
 
-- **Login gate**: Single shared password, stored only in the front-end config.
-- **Main dashboard**: Header with branding, last refresh time, and logout button.
-- **KPI cards**: Config-driven KPIs mapped to Google Sheet columns.
-- **Recent logs table**: Shows the latest submissions for each form.
-- **Four sectors**: Switch between Ice Quality Reports, Softball Therapy Pool, Fisher Therapy Pool, and Yost Ice Depth Checks.
-- **Auto-refresh**: Periodic data refresh (configured in `config.js`).
+## Table of Contents
 
-### Getting Started
+- [For Staff & Management](#for-staff--management)
+  - [Changing the Login Password](#changing-the-login-password)
+  - [If the Website Goes Down](#if-the-website-goes-down)
+  - [Correcting a Bad Form Submission](#correcting-a-bad-form-submission)
+- [For Developers](#for-developers)
+  - [Where to Find the Code](#where-to-find-the-code)
+  - [Project Structure](#project-structure)
+  - [Running Locally](#running-locally)
+  - [Connecting Google Sheets](#connecting-google-sheets)
+  - [Deployment (Vercel)](#deployment-vercel)
+  - [Metrics by Sector](#metrics-by-sector)
+  - [Troubleshooting](#troubleshooting)
 
-1. **Open the dashboard**
-   - You can simply open `index.html` directly in a modern browser, or
-   - Serve the folder with a small static server (recommended for fetch security):
+---
+
+## For Staff & Management
+
+### Changing the Login Password
+
+The dashboard uses a single shared password. To change it:
+
+1. Go to the GitHub repository for this project.
+2. Open the file called **`config.js`** (it's in the root folder).
+3. On line 5, find this line:
+   ```javascript
+   loginPassword: "yost-ice-2025",
+   ```
+4. Replace `"yost-ice-2025"` with your new password (keep the quotes).
+5. Save and commit the change. Vercel will automatically redeploy the site within a minute or two.
+
+> **Note:** This is a simple shared password for convenience. It is not a high-security authentication system — do not use it to protect sensitive personal data.
+
+---
+
+### If the Website Goes Down
+
+The dashboard is hosted on **Vercel**. If the site becomes unavailable:
+
+1. Log in to your Vercel account at [vercel.com](https://vercel.com).
+2. Find the **Yost Facilities Dashboard** project from your dashboard.
+3. Click on the project and go to the **Deployments** tab.
+4. Look at the most recent deployment — it will show one of these statuses:
+   - **Ready** — the site is live. If it's still not loading, try clearing your browser cache.
+   - **Failed** — something went wrong with a recent code change. Click into the deployment to see the error log and share it with your developer.
+   - **Paused** — the project was paused, usually due to a free tier limit. Click **Resume** or check your Vercel plan/billing settings.
+5. If you cannot resolve it yourself, share a screenshot of the Deployments page with your developer.
+
+---
+
+### Correcting a Bad Form Submission
+
+The dashboard reads directly from Google Sheets in real time. It does **not** store its own copy of the data. This means:
+
+- **To fix incorrect data:** Open the Google Sheet for that sector (links below), find the row with the wrong entry, and edit or delete it directly in the sheet. The dashboard will reflect the correction on its next refresh (within 5 minutes), or immediately if you click the refresh button.
+- **To remove a duplicate submission:** Delete the duplicate row from the Google Sheet.
+
+**Google Sheet links by sector:**
+
+| Sector | Google Sheet |
+|--------|-------------|
+| Ice Quality Reports | [Open Sheet](https://docs.google.com/spreadsheets/d/1uvyEJpFY8eGcuc6Gz22sZn6pnVxsZ1gElv8YMnzsSM4/edit) |
+| Softball Therapy Pool Checks | [Open Sheet](https://docs.google.com/spreadsheets/d/10XBiTfF0QTCC3znxr2nCdLM4nn0j29phQfbdmHbFeOA/edit) |
+| Fisher Therapy Pool Checks | [Open Sheet](https://docs.google.com/spreadsheets/d/1pdQTH-sbl41UA_yWMEWTyoGiruAqLVL61ym4ikHZ1Qk/edit) |
+| Yost Ice Depth Checks | [Open Sheet](https://docs.google.com/spreadsheets/d/15IEsNUxi_YsNDZMTRy3Pjqz7znd8QX9G5tO1fuj82wA/edit) |
+
+> **Tip:** You'll need edit access to the Google Sheet to make changes. If you don't have access, contact whoever manages your Google Workspace.
+
+---
+
+## For Developers
+
+### Where to Find the Code
+
+All code lives in the GitHub repository for this project. The three files you'll work with most are:
+
+| File | What it does |
+|------|-------------|
+| **`config.js`** | All configuration: password, Google Sheet URLs, KPI definitions, column mappings, refresh interval. **Start here for most changes.** |
+| **`main.js`** | All dashboard logic: data fetching, rendering, login handling, KPI calculations. |
+| **`index.html`** | The HTML shell and all inline CSS styles. |
+| **`api/proxy.js`** | A small Vercel serverless function used to proxy Google Apps Script requests and avoid CORS issues in production. |
+
+---
+
+### Project Structure
+
+```
+Yost-Facilities-Dashboard/
+├── index.html        # UI shell and styles
+├── main.js           # Dashboard logic
+├── config.js         # All configuration (edit this for most changes)
+└── api/
+    └── proxy.js      # Vercel serverless CORS proxy
+```
+
+This is a fully **client-side** project — no database, no backend server. The browser fetches data directly from Google Sheets via Google Apps Script web app URLs.
+
+---
+
+### Running Locally
 
 ```bash
-cd /path/to/Yost-Facilities-Dashboard
+# Clone the repo
+git clone https://github.com/rbuddhineni/yost-facilities-dashboard.git
+cd yost-facilities-dashboard
+
+# Serve with Python (recommended — avoids fetch/CORS issues)
 python -m http.server 4173
 ```
 
-Then visit `http://localhost:4173` in your browser.
+Then open `http://localhost:4173` in your browser.
 
-2. **Login**
-   - Default shared password is set in `config.js` under `loginPassword`.
-   - Change this value to whatever you prefer.
+> **Note:** When running locally, the app routes sheet requests through the `/api/proxy` path. This won't work with the Python server — you'll see fetch errors for live data. To test with real data locally, either use the Vercel CLI (`vercel dev`) or temporarily set `corsProxy: null` in `config.js` (only works if the Apps Script URLs have open CORS headers).
 
-### Connecting Your Google Sheets to Each Sector
+---
 
-The dashboard **pulls from Google Sheets** (each sheet is usually the response sheet of a Google Form). The browser cannot read a Sheet directly, so you expose each sheet as JSON via a **Google Apps Script** web app, then paste that URL into `config.js`.
+### Connecting Google Sheets
 
-| Sector | In `config.js` set `sheetJsonUrl` for this form |
-|--------|--------------------------------------------------|
-| Ice Quality Reports | `ice-quality-reports` |
-| Softball Therapy Pool Checks | `softball-therapy-pool` |
-| Fisher Therapy Pool Checks | `fisher-therapy-pool` |
-| Yost Ice Depth Checks | `yost-ice-depth` |
+Each sector pulls from a Google Sheet via a **Google Apps Script** web app URL. These URLs are already configured in `config.js` for the existing four sectors. If a sheet ever needs to be reconnected or a new sector added, follow these steps:
 
-**For each of the four sectors:**
+#### Step 1 — Create or open the Google Sheet
 
-1. Have a **Google Sheet** for that sector (e.g. the response sheet of a Google Form).
-2. In that sheet: **Extensions → Apps Script**, add the script below, then **Deploy → New deployment → Web app** (Execute as: **Me**, Who has access: **Anyone**). Copy the **Web app URL** (ends in `/exec`).
-3. In this project, open **`config.js`**, find the sector in the `forms` array, and set **`sheetJsonUrl`** to that URL.
+This is typically the response sheet from a Google Form. Open it in Google Sheets.
 
-Example for Ice Quality Reports:
+#### Step 2 — Deploy a Google Apps Script web app
 
-```javascript
-{
-  id: "ice-quality-reports",
-  label: "Ice Quality Reports",
-  sheetJsonUrl: "https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec",  // ← paste your URL here
-  columns: { timestamp: "Timestamp", notes: "Notes" },  // ← match your sheet’s column headers
-  kpis: [ /* ... */ ],
-}
-```
-
-**Important:** The `columns` keys in `config.js` must match your sheet’s **exact column headers** (e.g. if the header is "Timestamp", use `timestamp: "Timestamp"`). After you add the URLs and column mappings, refresh the dashboard to see live data.
-
-### Metrics by sector (form → sheet)
-
-Each sector’s Google Form writes one row per submission into its Google Sheet. The dashboard reads that sheet via the Apps Script URL and maps these columns into KPIs and the recent-logs table. Below is the **list of metrics (column headers)** stored in each sheet and how they’re used.
-
-| Sector | Sheet column (form field) | Statistic / use on dashboard |
-|--------|---------------------------|------------------------------|
-| **Ice Quality Reports** | Timestamp | Last submission time |
-| | Date | Report date |
-| | Name | Who submitted |
-| | Humidity | % — KPI |
-| | Air Temperature | °F — KPI |
-| | Surface Temperature | °F — KPI |
-| | Water Temp | Setpoint / system |
-| | Set Point | Target temp |
-| | Slab Temperature | Sub-surface |
-| | Supply Temperature | Chiller supply |
-| | Return Temperature | Chiller return |
-| | Notes | Free text — KPI |
-| | Time | Time of reading |
-| | Outside Air Temp | Ambient |
-| | Outside Relative Humidity | Ambient |
-| | Avg Ice Surface Temp | Computed average |
-| | Avg Humidity | Computed average |
-| | Avg Air Temp | Computed average |
-| | Diff slab and surface temp | Slab vs surface delta |
-| | Dew Point (ideal is 35-40) | Dew point |
-| | AVG Dew Point per Month | Monthly average |
-| **Softball Therapy Pool Checks** | Timestamp | Last check — KPI |
-| | DATE | Date of check |
-| | TIME | Time of check |
-| | Name | Who checked |
-| | Chlorine (Hot Tub) | ppm — KPI |
-| | Chlorine (Cold Tub) | ppm — KPI |
-| | pH (Hot Tub) | — KPI |
-| | pH (Cold Tub) | — KPI |
-| | Alkalinity (Hot Tub) | |
-| | Alkalinity (Cold Tub) | |
-| | Calcium Hardness (Hot Tub) | |
-| | Calcium Hardness (Cold Tub) | |
-| | Temperature (Hot Tub) | °F |
-| | Temperature (Cold Tub) | °F |
-| | ORP (mV) (Hot Tub) | Oxidation-reduction |
-| | ORP (mV) (Cold Tub) | Oxidation-reduction |
-| | TDS Level (Hot Tub) | Total dissolved solids |
-| | TDS Level (Cold Tub) | Total dissolved solids |
-| | Readings | Source (e.g. “From Reader”) |
-| | Shock? (trailing space in sheet) | Yes/No |
-| | Drain/Clean? | Yes/No |
-| | Comments | Free text — KPI |
-| **Fisher Therapy Pool Checks** | Same structure as Softball Therapy Pool | Same metrics (Chlorine, pH, temps, ORP, TDS, Shock?, Drain/Clean?, Comments). If your form uses different headers, update `config.js` columns to match. |
-| **Yost Ice Depth Checks** | Timestamp | Last check — KPI |
-| | (blank header) | Date value |
-| | Name | Who checked — KPI |
-| | 1 (Threshold) | Depth at threshold (in) |
-| | 2 (South Goal) … 19 (NE Corner) | Depth at each grid point (19 positions) |
-| | AVG | Average depth — KPI |
-| | AVG (w/o corners) | Average excluding corners — KPI |
-
-The dashboard shows a **last check** time and a few **KPIs** per sector (e.g. surface temp, chlorine, avg depth), plus a **recent logs** table with the columns defined in `config.js` for that sector.
-
-### Configuring Google Sheets (full steps)
-
-**Yes, this is a template!** You can customize everything in `config.js`:
-- Add/remove forms
-- Change KPI names, units, and ranges
-- Update column mappings
-- Adjust refresh intervals
-
-#### Step-by-Step: Setting Up Google Forms → Google Sheets → Dashboard
-
-1. **Create a Google Form**
-   - Go to [Google Forms](https://forms.google.com)
-   - Create your form (e.g., "Ice Quality Report" or "Yost Ice Depth Check")
-   - Add questions matching what you want to track (e.g., "Ice Temperature", "Attendance", "Maintenance Status")
-   - Google will automatically create a response Sheet
-
-2. **Get Your Sheet ID**
-   - Open the response Sheet (click "Responses" tab → "Link to Sheets")
-   - Look at the URL: `https://docs.google.com/spreadsheets/d/SHEET_ID_HERE/edit`
-   - Copy the `SHEET_ID_HERE` part
-
-3. **Create a JSON Endpoint Using Google Apps Script**
-   - In your Sheet, go to **Extensions → Apps Script**
-   - Delete any default code and paste this:
+1. In the sheet, go to **Extensions → Apps Script**.
+2. Delete any existing code and paste the following:
 
 ```javascript
 function doGet() {
-  // Enable CORS for cross-origin requests
   const output = ContentService.createTextOutput();
   output.setMimeType(ContentService.MimeType.JSON);
-  
+
   try {
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
     const data = sheet.getDataRange().getValues();
-    
+
     if (data.length === 0) {
       output.setContent(JSON.stringify([]));
       return output;
     }
-    
+
     const headers = data[0];
     const rows = data.slice(1).map(row => {
       const obj = {};
-      headers.forEach((header, i) => {
-        obj[header] = row[i] || null;
-      });
+      headers.forEach((header, i) => { obj[header] = row[i] || null; });
       return obj;
     });
-    
+
     output.setContent(JSON.stringify(rows));
     return output;
   } catch (error) {
@@ -177,70 +165,144 @@ function doGet() {
 }
 ```
 
-   - Click **Deploy → New deployment**
-   - Choose type: **Web app**
+3. Click **Deploy → New deployment**.
+4. Set type to **Web app**, execute as **Me**, access to **Anyone**.
+5. Click **Deploy** and copy the URL ending in `/exec`.
+
+#### Step 3 — Update `config.js`
+
+Find the sector in the `forms` array (or add a new one) and set:
+
+```javascript
+{
+  id: "your-sector-id",
+  label: "Your Sector Label",
+  sheetUrl: "https://docs.google.com/spreadsheets/d/...",  // direct link (for the ↗ button)
+  sheetJsonUrl: "https://script.google.com/macros/s/.../exec",  // Apps Script URL
+  columns: {
+    timestamp: "Timestamp",   // key: internal name, value: exact sheet column header
+    name: "Name",
+    // ... add all columns you want to display or use in KPIs
+  },
+  kpis: [
+    { id: "last-check", label: "Last check", columnKey: "timestamp", format: "timestamp" },
+    // format options: "timestamp", "date", "time", "number", "integer", "string"
+  ],
+}
+```
+
+> **Important:** The values in `columns` must exactly match the column headers in your Google Sheet, including capitalization and spacing.
+
+---
+
+### Deployment (Vercel)
+
+The project is deployed on Vercel via GitHub integration. Pushing to the `main` branch triggers an automatic redeploy.
+
+- **To deploy a change:** commit and push to `main` — Vercel handles the rest.
+- **To check deployment status:** log in to [vercel.com](https://vercel.com), open the project, and check the **Deployments** tab.
+- **Environment:** no environment variables are required. All config is in `config.js`.
+- **The `api/proxy.js` function** is automatically deployed as a Vercel serverless function — no extra setup needed.
+
+---
+
+### Metrics by Sector
+
+Each sector's Google Form writes one row per submission into its response sheet. Below is the full list of columns tracked per sector.
+
+<details>
+<summary><strong>Ice Quality Reports</strong></summary>
+
+| Column header in sheet | Used as |
+|------------------------|---------|
+| Timestamp | Last submission time (KPI) |
+| Date | Report date |
+| Name | Who submitted |
+| Humidity | KPI |
+| Air Temperature | KPI |
+| Surface Temperature | KPI |
+| Water Temp | System setpoint |
+| Set Point | Target temp |
+| Slab Temperature | Sub-surface |
+| Supply Temperature | Chiller supply |
+| Return Temperature | Chiller return |
+| Notes | KPI |
+| Time | Time of reading |
+| Outside Air Temp | Ambient |
+| Outside Relative Humidity | Ambient |
+| Avg Ice Surface Temp | Computed average |
+| Avg Humidity | Computed average |
+| Avg Air Temp | Computed average |
+| Diff slab and surface temp | Delta |
+| Dew Point (ideal is 35-40) | Dew point |
+| AVG Dew Point per Month | Monthly average |
+
+</details>
+
+<details>
+<summary><strong>Softball Therapy Pool Checks</strong></summary>
+
+| Column header in sheet | Used as |
+|------------------------|---------|
+| Timestamp | Last check (KPI) |
+| DATE | Date of check |
+| TIME | Time of check |
+| Name | Who checked |
+| Chlorine (Hot Tub) | KPI |
+| Chlorine (Cold Tub) | KPI |
+| pH (Hot Tub) | KPI |
+| pH (Cold Tub) | KPI |
+| Alkalinity (Hot Tub / Cold Tub) | Logged |
+| Calcium Hardness (Hot Tub / Cold Tub) | Logged |
+| Temperature (Hot Tub / Cold Tub) | Logged |
+| ORP (mV) (Hot Tub / Cold Tub) | Oxidation-reduction |
+| TDS Level (Hot Tub / Cold Tub) | Total dissolved solids |
+| Readings | Source (e.g. "From Reader") |
+| Shock? | Yes/No |
+| Drain/Clean? | Yes/No |
+| Comments | KPI |
+
+</details>
+
+<details>
+<summary><strong>Fisher Therapy Pool Checks</strong></summary>
+
+Same structure as Softball Therapy Pool, but uses Bromine instead of Chlorine. If your form uses different headers, update `config.js` to match.
+
+</details>
+
+<details>
+<summary><strong>Yost Ice Depth Checks</strong></summary>
+
+| Column header in sheet | Used as |
+|------------------------|---------|
+| Timestamp | Last check (KPI) |
+| Name | Who checked (KPI) |
+| 1 (Threshold) through 19 (NE Corner) | Depth at each of 19 grid positions |
+| AVG | Average depth (KPI) |
+| AVG (w/o corners) | Average excluding corners (KPI) |
+
+</details>
+
+---
+
+### Troubleshooting
+
+**"Failed to fetch" or network error on a sector**
+
+1. Open the Apps Script URL for that sector directly in a browser — you should see raw JSON. If you see an error page, the script needs to be redeployed.
+2. In Apps Script, go to **Deploy → Manage deployments → Edit** and confirm:
    - Execute as: **Me**
-   - Who has access: **Anyone** (or "Anyone with Google account" if you want some protection)
-   - Click **Deploy**
-   - Copy the **Web app URL** (looks like `https://script.google.com/macros/s/.../exec`)
+   - Who has access: **Anyone**
+3. After any script code changes, you must deploy a **new version** — the URL won't update automatically.
+4. Check the browser console (F12 → Console) for detailed error messages.
 
-4. **Update `config.js`**
-   - Open `config.js`
-   - Find the sector you want to configure (e.g., `"ice-quality-reports"`, `"yost-ice-depth"`)
-   - Set `sheetJsonUrl` to your Apps Script URL from step 3
-   - **Important**: Make sure `columns` keys match your Sheet's exact header names:
-     ```javascript
-     columns: {
-       timestamp: "Timestamp",  // Must match Sheet header exactly
-       iceTemperature: "Ice Temperature (°F)",
-       // ... etc
-     }
-     ```
-   - Customize `kpis` to match your columns and add/remove as needed
+**Dashboard shows old data**
 
-5. **Test It!**
-   - Submit a test entry via your Google Form
-   - Wait a few seconds for the form to process
-   - Refresh your dashboard (or wait for auto-refresh)
-   - You should see your real data!
+- The dashboard auto-refreshes every 5 minutes. Click the refresh button in the header to force an immediate update.
+- If data is still stale, check that the Apps Script URL in `config.js` is the `/exec` URL (not `/dev`).
 
-**Note**: If `sheetJsonUrl` is left as `null`, the dashboard will show mock data so you can test the UI without setting up Sheets first.
+**Vercel build failed after a code push**
 
-### Troubleshooting "Failed to Fetch" Errors
-
-If you see a "Failed to fetch" or network error:
-
-1. **Check the URL format**
-   - Production deployments use `/exec` at the end: `.../macros/s/.../exec`
-   - Development URLs use `/dev`: `.../macros/s/.../dev`
-   - Both should work, but `/exec` is recommended for production
-
-2. **Verify deployment settings**
-   - Go back to Apps Script → **Deploy → Manage deployments**
-   - Click the pencil icon to edit
-   - Make sure **Who has access** is set to **"Anyone"** (not "Anyone with Google account")
-   - Click **Deploy** again if you changed it
-
-3. **Test the URL directly**
-   - Open your Apps Script URL in a browser
-   - You should see JSON data (or an empty array `[]` if the sheet is empty)
-   - If you see an error page, the script isn't deployed correctly
-
-4. **Check browser console**
-   - Open browser DevTools (F12) → Console tab
-   - Look for detailed error messages that will help diagnose the issue
-
-5. **Redeploy after script changes**
-   - After updating your Apps Script code, you must **Deploy → Manage deployments → Edit → Deploy** again
-   - The script won't update automatically
-
-### Auto-Refresh
-
-- The refresh interval is controlled by `APP_CONFIG.refreshIntervalMs` in `config.js`.
-- Default is 5 minutes. Adjust as needed.
-
-### Notes
-
-- Everything runs client-side; there is no backend.
-- The login is a simple password gate for convenience, not a secure authentication system.
-
+- Go to the Vercel project → **Deployments** tab → click the failed deployment to read the build log.
+- The most common cause is a syntax error in `config.js` or `main.js`. Fix the error, push again, and Vercel will retry automatically.
