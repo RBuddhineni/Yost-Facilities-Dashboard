@@ -368,14 +368,38 @@ function computeKpiValue(kpi, rows) {
     return { display: "—", badge: null };
   }
 
-  const latest = getMostRecentRowWithValue(rows, kpi.columnKey) ?? rows[0];
-  const raw = latest[kpi.columnKey];
+  // Apply row filter if specified (e.g. hot vs cold tub)
+  let workingRows = rows;
+  if (kpi.filterBy) {
+    const filterVal = String(kpi.filterBy.value).toLowerCase();
+    workingRows = rows.filter(
+      (row) => String(row[kpi.filterBy.columnKey] ?? "").toLowerCase() === filterVal
+    );
+  }
+
+  // Only consider the 3 most recent matching rows — never scan back beyond this window
+  const recentRows = workingRows.slice(0, 3);
+  if (recentRows.length === 0) return { display: "—", badge: null };
+
+  const latest = recentRows.find((row) => {
+    const v = row?.[kpi.columnKey];
+    return v != null && v !== "";
+  }) ?? null;
+  const raw = latest?.[kpi.columnKey] ?? null;
 
   switch (kpi.format) {
     case "integer":
       return { display: formatNumber(raw, 0), badge: null };
-    case "number":
-      return { display: formatNumber(raw, kpi.decimals ?? 2), badge: null };
+    case "number": {
+      const values = recentRows
+        .map((r) => r[kpi.columnKey])
+        .filter((v) => v != null && v !== "")
+        .map(Number)
+        .filter((n) => !isNaN(n));
+      if (values.length === 0) return { display: "—", badge: null };
+      const avg = values.reduce((sum, v) => sum + v, 0) / values.length;
+      return { display: formatNumber(avg, kpi.decimals ?? 2), badge: null };
+    }
     case "count":
       return { display: String(rows.length), badge: null };
     case "timestamp": {
@@ -534,7 +558,7 @@ function renderOverview() {
 
       const kpiMinis = form.kpis
         .map((kpi) => {
-          const { display } = computeKpiValue(kpi, filteredRows);
+          const { display } = computeKpiValue(kpi, rows);
           return `
             <div class="bubble-kpi">
               <span class="bubble-kpi-label">${kpi.label}</span>
@@ -637,8 +661,7 @@ function renderSectorDetail() {
 
   const allRows = appState.dataByForm[form.id] ?? [];
   const filteredRows = filterRowsByTime(allRows, appState.timeFilter);
-  // KPIs reflect only the 3 most recent entries — never scan back beyond the filter window.
-  const kpiRows = filteredRows;
+  const kpiRows = allRows;
   const hasError = !!(appState.errorsByForm?.[form.id]);
 
   // KPI cards
@@ -646,7 +669,11 @@ function renderSectorDetail() {
     .map((kpi) => {
       const { display } = computeKpiValue(kpi, kpiRows);
       const badge = getKpiBadge(kpi, kpiRows);
-      const latestRow = getMostRecentRowWithValue(kpiRows, kpi.columnKey) ?? kpiRows[0] ?? null;
+      const filterVal = kpi.filterBy ? String(kpi.filterBy.value).toLowerCase() : null;
+      const rowsForTimestamp = filterVal
+        ? kpiRows.filter((r) => String(r[kpi.filterBy.columnKey] ?? "").toLowerCase() === filterVal)
+        : kpiRows;
+      const latestRow = getMostRecentRowWithValue(rowsForTimestamp.slice(0, 3), kpi.columnKey) ?? rowsForTimestamp[0] ?? null;
       const timestampDisplay = latestRow?.timestamp
         ? formatTimestamp(latestRow.timestamp)
         : "No recent entries";
