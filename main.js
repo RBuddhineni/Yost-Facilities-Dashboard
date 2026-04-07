@@ -10,7 +10,7 @@ const rootEl = document.getElementById("app-root");
 let appState = {
   isAuthenticated: false,
   activeSectorId: null,  // null = overview, string = sector detail view
-  timeFilter: "monthly", // "weekly" | "monthly" | "all"
+  timeFilter: "recent3", // "recent3"
   lastRefresh: null,
   loading: false,
   error: null,
@@ -130,6 +130,11 @@ function coerceSheetRow(rawRow, columns) {
   return result;
 }
 
+function getManualRows(formConfig) {
+  if (!Array.isArray(formConfig.manualRows)) return [];
+  return formConfig.manualRows.map((row) => coerceSheetRow(row, formConfig.columns));
+}
+
 /**
  * Normalizes various Google Sheets JSON formats into a consistent array of row objects.
  */
@@ -174,6 +179,8 @@ function normalizeSheetData(json) {
 
 async function fetchSheet(formConfig) {
   if (!formConfig.sheetJsonUrl) {
+    const manualRows = getManualRows(formConfig);
+    if (manualRows.length > 0) return manualRows;
     const now = new Date();
     const sectorIds = [
       "ice-quality-reports",
@@ -193,26 +200,49 @@ async function fetchSheet(formConfig) {
   }
 
   const proxyUrl = formConfig.corsProxy ?? APP_CONFIG.corsProxy;
-  const urlToFetch = proxyUrl
-    ? proxyUrl + encodeURIComponent(formConfig.sheetJsonUrl)
-    : formConfig.sheetJsonUrl;
 
-  let resp;
-  try {
-    resp = await fetch(urlToFetch, {
+  async function request(url) {
+    return fetch(url, {
       method: "GET",
       mode: "cors",
       cache: "no-cache",
     });
+  }
+
+  async function fetchWithFallback() {
+    if (!proxyUrl) return request(formConfig.sheetJsonUrl);
+
+    const proxiedUrl = proxyUrl + encodeURIComponent(formConfig.sheetJsonUrl);
+    try {
+      const proxiedResp = await request(proxiedUrl);
+      // Static local servers (e.g. python -m http.server) do not serve /api/proxy.
+      // If that endpoint is missing, fall back to direct Apps Script request.
+      if (proxiedResp.status === 404) {
+        return request(formConfig.sheetJsonUrl);
+      }
+      return proxiedResp;
+    } catch {
+      // Proxy network failure: try direct fetch before surfacing an error.
+      return request(formConfig.sheetJsonUrl);
+    }
+  }
+
+  let resp;
+  try {
+    resp = await fetchWithFallback();
   } catch (err) {
+    const manualRows = getManualRows(formConfig);
+    if (manualRows.length > 0) return manualRows;
     const suggestion = APP_CONFIG.corsProxy
-      ? " CORS proxy may be down; try again or set config.corsProxy to null and add .setHeader('Access-Control-Allow-Origin','*') in your Apps Script doGet."
+      ? " Proxy/direct fetch failed. Ensure Apps Script allows public access and returns CORS headers (Access-Control-Allow-Origin: *), or run with vercel dev."
       : " Set config.corsProxy to 'https://corsproxy.io/?' to use a CORS proxy, or add .setHeader('Access-Control-Allow-Origin','*') in your Apps Script doGet.";
     throw new Error(`[${formConfig.label}] Fetch failed: ${err.message}.${suggestion}`);
   }
 
   const text = await resp.text();
   if (!resp.ok) {
+    const manualRows = getManualRows(formConfig);
+    if (manualRows.length > 0) return manualRows;
     const snippet = text.length > 200 ? text.slice(0, 200) + "…" : text;
     const extraHelp =
       resp.status === 403
@@ -227,6 +257,8 @@ async function fetchSheet(formConfig) {
   try {
     json = JSON.parse(text);
   } catch (err) {
+    const manualRows = getManualRows(formConfig);
+    if (manualRows.length > 0) return manualRows;
     const isHtml = /^\s*</.test(text) || text.includes("<!DOCTYPE") || text.includes("<html");
     const hint = isHtml
       ? " Server returned HTML instead of JSON. In Apps Script: check for errors in the script editor, ensure doGet() returns JSON, and add .setHeader('Access-Control-Allow-Origin','*') on the response."
@@ -306,18 +338,9 @@ function stopAutoRefresh() {
 // --- Data helpers ---
 
 function filterRowsByTime(rows, filter) {
-  if (!Array.isArray(rows) || filter === "all") return rows;
-  const cutoff = new Date();
-  if (filter === "weekly") {
-    cutoff.setDate(cutoff.getDate() - 7);
-  } else if (filter === "monthly") {
-    cutoff.setDate(cutoff.getDate() - 30);
-  }
-  return rows.filter((row) => {
-    if (!row.timestamp) return false;
-    const t = new Date(row.timestamp);
-    return !isNaN(t.getTime()) && t >= cutoff;
-  });
+  if (!Array.isArray(rows)) return [];
+  if (filter === "recent3") return rows.slice(0, 3);
+  return rows;
 }
 
 function computeStats(values) {
@@ -332,12 +355,20 @@ function computeStats(values) {
   return { median, min: nums[0], max: nums[nums.length - 1], count: nums.length };
 }
 
+function getMostRecentRowWithValue(rows, columnKey) {
+  if (!Array.isArray(rows) || rows.length === 0) return null;
+  return rows.find((row) => {
+    const value = row?.[columnKey];
+    return value != null && value !== "";
+  }) ?? null;
+}
+
 function computeKpiValue(kpi, rows) {
   if (!Array.isArray(rows) || rows.length === 0) {
     return { display: "—", badge: null };
   }
 
-  const latest = rows[0];
+  const latest = getMostRecentRowWithValue(rows, kpi.columnKey) ?? rows[0];
   const raw = latest[kpi.columnKey];
 
   switch (kpi.format) {
@@ -349,6 +380,14 @@ function computeKpiValue(kpi, rows) {
       return { display: String(rows.length), badge: null };
     case "timestamp": {
       const text = raw == null || raw === "" ? "—" : formatTimestamp(raw);
+      return { display: text, badge: null };
+    }
+    case "date": {
+      const text = raw == null || raw === "" ? "—" : formatDateOnly(raw);
+      return { display: text, badge: null };
+    }
+    case "time": {
+      const text = raw == null || raw === "" ? "—" : formatTimeOnly(raw);
       return { display: text, badge: null };
     }
     case "string": {
@@ -375,9 +414,7 @@ function getKpiBadge(kpi, rows) {
 
 function buildTimeFilterHtml() {
   const opts = [
-    { key: "weekly", label: "Last 7 days" },
-    { key: "monthly", label: "Last 30 days" },
-    { key: "all", label: "All time" },
+    { key: "recent3", label: "Three most recent entries" },
   ];
   return `
     <div class="time-filter">
@@ -482,12 +519,7 @@ function renderLogin() {
 function renderOverview() {
   if (!rootEl) return;
 
-  const filterLabel =
-    appState.timeFilter === "weekly"
-      ? "week"
-      : appState.timeFilter === "monthly"
-      ? "month"
-      : "total";
+  const filterLabel = "three most recent entries";
 
   const sectorCardsHtml = APP_CONFIG.forms
     .map((form) => {
@@ -501,8 +533,6 @@ function renderOverview() {
         : "No recent entries";
 
       const kpiMinis = form.kpis
-        .filter((k) => k.id !== "last-check")
-        .slice(0, 3)
         .map((kpi) => {
           const { display } = computeKpiValue(kpi, rows);
           return `
@@ -515,8 +545,8 @@ function renderOverview() {
 
       const countText =
         filteredRows.length > 0
-          ? `${filteredRows.length} entr${filteredRows.length === 1 ? "y" : "ies"} this ${filterLabel}`
-          : `No entries this ${filterLabel}`;
+          ? `${filteredRows.length} entr${filteredRows.length === 1 ? "y" : "ies"} in ${filterLabel}`
+          : `No entries in ${filterLabel}`;
 
       return `
         <div class="sector-bubble" data-sector-id="${form.id}">
@@ -607,8 +637,8 @@ function renderSectorDetail() {
 
   const allRows = appState.dataByForm[form.id] ?? [];
   const filteredRows = filterRowsByTime(allRows, appState.timeFilter);
-  // For KPI display use filtered rows if available, otherwise fall back to all rows
-  const kpiRows = filteredRows.length > 0 ? filteredRows : allRows;
+  // KPIs always reflect the latest available row.
+  const kpiRows = allRows;
   const hasError = !!(appState.errorsByForm?.[form.id]);
 
   // KPI cards
@@ -616,7 +646,7 @@ function renderSectorDetail() {
     .map((kpi) => {
       const { display } = computeKpiValue(kpi, kpiRows);
       const badge = getKpiBadge(kpi, kpiRows);
-      const latestRow = kpiRows[0] ?? null;
+      const latestRow = getMostRecentRowWithValue(kpiRows, kpi.columnKey) ?? kpiRows[0] ?? null;
       const timestampDisplay = latestRow?.timestamp
         ? formatTimestamp(latestRow.timestamp)
         : "No recent entries";
