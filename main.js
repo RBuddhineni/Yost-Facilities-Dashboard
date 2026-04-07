@@ -370,64 +370,58 @@ function getMostRecentRowWithValue(rows, columnKey) {
   }) ?? null;
 }
 
+function formatKpiRawValue(kpi, raw) {
+  switch (kpi.format) {
+    case "integer":
+      return formatNumber(raw, 0);
+    case "number":
+      return formatNumber(raw, kpi.decimals ?? 2);
+    case "timestamp":
+      return raw == null || raw === "" ? "—" : formatTimestamp(raw);
+    case "date":
+      return raw == null || raw === "" ? "—" : formatDateOnly(raw);
+    case "time":
+      return raw == null || raw === "" ? "—" : formatTimeOnly(raw);
+    case "string":
+      return raw == null || raw === "" ? "—" : String(raw);
+    default:
+      return String(raw ?? "—");
+  }
+}
+
+function getRowsForKpi(kpi, rows) {
+  if (!Array.isArray(rows)) return [];
+  if (!kpi.filterBy) return rows;
+  const filterVal = String(kpi.filterBy.value).toLowerCase();
+  return rows.filter(
+    (row) => String(row[kpi.filterBy.columnKey] ?? "").toLowerCase() === filterVal
+  );
+}
+
+function getKpiRecentEntries(kpi, rows, limit = 3) {
+  const rowsForKpi = getRowsForKpi(kpi, rows);
+  return rowsForKpi
+    .filter((row) => row?.[kpi.columnKey] != null && row?.[kpi.columnKey] !== "")
+    .slice(0, limit)
+    .map((row) => ({
+      timestamp: row.timestamp,
+      displayValue: formatKpiRawValue(kpi, row[kpi.columnKey]),
+    }));
+}
+
 function computeKpiValue(kpi, rows) {
   if (!Array.isArray(rows) || rows.length === 0) {
     return { display: "—", badge: null };
   }
 
-  // Apply row filter if specified (e.g. hot vs cold tub)
-  let workingRows = rows;
-  if (kpi.filterBy) {
-    const filterVal = String(kpi.filterBy.value).toLowerCase();
-    workingRows = rows.filter(
-      (row) => String(row[kpi.filterBy.columnKey] ?? "").toLowerCase() === filterVal
-    );
-  }
-
-  // Only consider the 3 most recent matching rows — never scan back beyond this window
-  const recentRows = workingRows.slice(0, 3);
-  if (recentRows.length === 0) return { display: "—", badge: null };
-
-  const latest = recentRows.find((row) => {
-    const v = row?.[kpi.columnKey];
-    return v != null && v !== "";
-  }) ?? null;
+  const workingRows = getRowsForKpi(kpi, rows);
+  const latest = workingRows[0] ?? null;
   const raw = latest?.[kpi.columnKey] ?? null;
 
-  switch (kpi.format) {
-    case "integer":
-      return { display: formatNumber(raw, 0), badge: null };
-    case "number": {
-      const values = recentRows
-        .map((r) => r[kpi.columnKey])
-        .filter((v) => v != null && v !== "")
-        .map(Number)
-        .filter((n) => !isNaN(n));
-      if (values.length === 0) return { display: "—", badge: null };
-      const avg = values.reduce((sum, v) => sum + v, 0) / values.length;
-      return { display: formatNumber(avg, kpi.decimals ?? 2), badge: null };
-    }
-    case "count":
-      return { display: String(rows.length), badge: null };
-    case "timestamp": {
-      const text = raw == null || raw === "" ? "—" : formatTimestamp(raw);
-      return { display: text, badge: null };
-    }
-    case "date": {
-      const text = raw == null || raw === "" ? "—" : formatDateOnly(raw);
-      return { display: text, badge: null };
-    }
-    case "time": {
-      const text = raw == null || raw === "" ? "—" : formatTimeOnly(raw);
-      return { display: text, badge: null };
-    }
-    case "string": {
-      const text = raw == null || raw === "" ? "—" : String(raw);
-      return { display: text, badge: null };
-    }
-    default:
-      return { display: String(raw ?? "—"), badge: null };
+  if (kpi.format === "count") {
+    return { display: String(workingRows.length), badge: null };
   }
+  return { display: formatKpiRawValue(kpi, raw), badge: null };
 }
 
 function getKpiBadge(kpi, rows) {
@@ -676,26 +670,27 @@ function renderSectorDetail() {
     .map((kpi) => {
       const { display } = computeKpiValue(kpi, kpiRows);
       const badge = getKpiBadge(kpi, kpiRows);
-      const filterVal = kpi.filterBy ? String(kpi.filterBy.value).toLowerCase() : null;
-      const rowsForTimestamp = filterVal
-        ? kpiRows.filter((r) => String(r[kpi.filterBy.columnKey] ?? "").toLowerCase() === filterVal)
-        : kpiRows;
-      const latestRow = getMostRecentRowWithValue(rowsForTimestamp.slice(0, 3), kpi.columnKey) ?? rowsForTimestamp[0] ?? null;
-      const timestampDisplay = latestRow?.timestamp
+      const rowsForTimestamp = getRowsForKpi(kpi, kpiRows);
+      const latestRow = rowsForTimestamp[0] ?? null;
+      const latestRawValue = latestRow?.[kpi.columnKey];
+      const hasLatestValue = latestRawValue != null && latestRawValue !== "";
+      const timestampDisplay = hasLatestValue && latestRow?.timestamp
         ? formatTimestamp(latestRow.timestamp)
-        : "No recent entries";
+        : "—";
+      const recentEntries = getKpiRecentEntries(kpi, kpiRows, 3);
+      const recentEntriesJson = encodeURIComponent(JSON.stringify(recentEntries));
       const badgeHtml = badge
         ? `<span class="kpi-badge ${badge.kind === "bad" ? "bad" : ""}">${badge.label}</span>`
         : "";
       return `
-        <div class="kpi-card">
+        <button class="kpi-card clickable-kpi" data-kpi-label="${kpi.label}" data-kpi-entries="${recentEntriesJson}" type="button">
           <div class="kpi-label">${kpi.label}</div>
           <div class="kpi-value-row">
             <div class="kpi-value">${display}</div>
             ${badgeHtml}
           </div>
           <div class="kpi-meta">Latest entry: ${timestampDisplay}</div>
-        </div>
+        </button>
       `;
     })
     .join("");
@@ -786,6 +781,17 @@ function renderSectorDetail() {
               ${buildTimeFilterHtml()}
             </div>
             <div class="kpi-grid">${kpiCardsHtml}</div>
+            <div class="kpi-modal" data-kpi-modal hidden>
+              <div class="kpi-modal-backdrop" data-kpi-close></div>
+              <div class="kpi-modal-panel">
+                <div class="kpi-modal-header">
+                  <div class="kpi-modal-title" data-kpi-title></div>
+                  <button class="secondary-button" data-kpi-close type="button">Close</button>
+                </div>
+                <div class="kpi-modal-subtitle">Last three entries for this metric</div>
+                <div class="kpi-modal-list" data-kpi-list></div>
+              </div>
+            </div>
           </section>
 
           ${statsHtml}
@@ -820,6 +826,45 @@ function renderSectorDetail() {
     ?.addEventListener("click", () => setState({ activeSectorId: null }));
   rootEl.querySelector("[data-action='logout']")?.addEventListener("click", handleLogout);
   attachTimeFilterListeners();
+
+  const modalEl = rootEl.querySelector("[data-kpi-modal]");
+  const titleEl = rootEl.querySelector("[data-kpi-title]");
+  const listEl = rootEl.querySelector("[data-kpi-list]");
+  const closeModal = () => {
+    if (!modalEl) return;
+    modalEl.setAttribute("hidden", "");
+  };
+  rootEl.querySelectorAll("[data-kpi-close]").forEach((el) => {
+    el.addEventListener("click", closeModal);
+  });
+  rootEl.querySelectorAll(".clickable-kpi").forEach((card) => {
+    card.addEventListener("click", () => {
+      if (!modalEl || !titleEl || !listEl) return;
+      const label = card.getAttribute("data-kpi-label") ?? "Metric";
+      const encoded = card.getAttribute("data-kpi-entries") ?? "";
+      let entries = [];
+      try {
+        entries = JSON.parse(decodeURIComponent(encoded));
+      } catch {
+        entries = [];
+      }
+      titleEl.textContent = label;
+      listEl.innerHTML =
+        entries.length === 0
+          ? `<div class="logs-empty">No recent entries for this metric.</div>`
+          : entries
+              .map(
+                (entry) => `
+                  <div class="kpi-modal-item">
+                    <div class="kpi-modal-item-value">${entry.displayValue}</div>
+                    <div class="kpi-modal-item-time">${entry.timestamp ? formatTimestamp(entry.timestamp) : "No timestamp"}</div>
+                  </div>
+                `
+              )
+              .join("");
+      modalEl.removeAttribute("hidden");
+    });
+  });
 }
 
 function renderApp() {

@@ -253,6 +253,19 @@ body {
   gap: 6px;
 }
 
+.clickable-kpi {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+}
+
+.clickable-kpi:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+  border-color: #bfdbfe;
+}
+
 .kpi-label {
   font-size: 12px;
   text-transform: uppercase;
@@ -295,6 +308,81 @@ body {
 .kpi-badge.bad {
   background: rgba(220, 38, 38, 0.08);
   color: #b91c1c;
+}
+
+.kpi-modal[hidden] {
+  display: none;
+}
+
+.kpi-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+}
+
+.kpi-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.kpi-modal-panel {
+  position: relative;
+  width: min(560px, calc(100vw - 24px));
+  margin: 8vh auto 0;
+  background: #ffffff;
+  border-radius: 14px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 25px 60px rgba(15, 23, 42, 0.3);
+  padding: 16px;
+}
+
+.kpi-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.kpi-modal-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.kpi-modal-subtitle {
+  font-size: 12px;
+  color: #6b7280;
+  margin-top: 4px;
+  margin-bottom: 12px;
+}
+
+.kpi-modal-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.kpi-modal-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #f8fafc;
+  padding: 10px 12px;
+  gap: 10px;
+}
+
+.kpi-modal-item-value {
+  font-size: 17px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.kpi-modal-item-time {
+  font-size: 12px;
+  color: #6b7280;
 }
 
 .section-header {
