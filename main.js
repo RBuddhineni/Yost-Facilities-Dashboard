@@ -415,7 +415,7 @@ function computeKpiValue(kpi, rows) {
   }
 
   const workingRows = getRowsForKpi(kpi, rows);
-  const latest = workingRows[0] ?? null;
+  const latest = getMostRecentRowWithValue(workingRows, kpi.columnKey);
   const raw = latest?.[kpi.columnKey] ?? null;
 
   if (kpi.format === "count") {
@@ -671,12 +671,10 @@ function renderSectorDetail() {
       const { display } = computeKpiValue(kpi, kpiRows);
       const badge = getKpiBadge(kpi, kpiRows);
       const rowsForTimestamp = getRowsForKpi(kpi, kpiRows);
-      const latestRow = rowsForTimestamp[0] ?? null;
-      const latestRawValue = latestRow?.[kpi.columnKey];
-      const hasLatestValue = latestRawValue != null && latestRawValue !== "";
-      const timestampDisplay = hasLatestValue && latestRow?.timestamp
+      const latestRow = getMostRecentRowWithValue(rowsForTimestamp, kpi.columnKey) ?? rowsForTimestamp[0] ?? null;
+      const timestampDisplay = latestRow?.timestamp
         ? formatTimestamp(latestRow.timestamp)
-        : "—";
+        : "No recent entries";
       const recentEntries = getKpiRecentEntries(kpi, kpiRows, 3);
       const recentEntriesJson = encodeURIComponent(JSON.stringify(recentEntries));
       const badgeHtml = badge
