@@ -534,7 +534,7 @@ function renderOverview() {
 
       const kpiMinis = form.kpis
         .map((kpi) => {
-          const { display } = computeKpiValue(kpi, rows);
+          const { display } = computeKpiValue(kpi, filteredRows);
           return `
             <div class="bubble-kpi">
               <span class="bubble-kpi-label">${kpi.label}</span>
@@ -637,8 +637,8 @@ function renderSectorDetail() {
 
   const allRows = appState.dataByForm[form.id] ?? [];
   const filteredRows = filterRowsByTime(allRows, appState.timeFilter);
-  // KPIs always reflect the latest available row.
-  const kpiRows = allRows;
+  // KPIs reflect only the 3 most recent entries — never scan back beyond the filter window.
+  const kpiRows = filteredRows;
   const hasError = !!(appState.errorsByForm?.[form.id]);
 
   // KPI cards
