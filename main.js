@@ -123,9 +123,16 @@ function formatNumber(value, decimals) {
 }
 
 function coerceSheetRow(rawRow, columns) {
+  // Build a trimmed-key index so headers with accidental leading/trailing
+  // spaces (common in Google Forms sheets) still match our config labels.
+  const trimmedRaw = {};
+  for (const rawKey of Object.keys(rawRow)) {
+    trimmedRaw[String(rawKey).trim()] = rawRow[rawKey];
+  }
   const result = {};
   for (const [key, columnLabel] of Object.entries(columns)) {
-    result[key] = rawRow[columnLabel] ?? rawRow[key] ?? null;
+    const trimmedLabel = String(columnLabel).trim();
+    result[key] = rawRow[columnLabel] ?? trimmedRaw[trimmedLabel] ?? rawRow[key] ?? null;
   }
   return result;
 }
