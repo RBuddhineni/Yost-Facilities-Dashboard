@@ -186,6 +186,7 @@ export const APP_CONFIG = {
     {
       id: "fisher-stadium-astroturf",
       label: "Fisher Stadium AstroTurf",
+      mostRecentEntryOnly: true,
       sheetUrl: "https://docs.google.com/spreadsheets/d/1OOq7jbepuW1lRzCpIMoyHxHem3SY00oFhktF83u6DCM/edit?gid=1170812430#gid=1170812430",
       sheetJsonUrl:
         "https://script.google.com/macros/s/AKfycbwp_dytjb3CMCEGbcWv7Ekg7vDqwkWiuDRaUy4UzPdsUeDE0ARwuF-IlvDGaSZ8Xd3v/exec",
@@ -216,6 +217,7 @@ export const APP_CONFIG = {
     {
       id: "alumni-field-astroturf",
       label: "Alumni Field AstroTurf",
+      mostRecentEntryOnly: true,
       sheetUrl: "https://docs.google.com/spreadsheets/d/1djYCiA90FylgzsHsvkzYYU5E75WDa66offbmpZvWF38/edit?gid=1170812430#gid=1170812430",
       sheetJsonUrl:
         "https://script.google.com/macros/s/AKfycbwowO5EgWsTcaMYByKAbROWJluwAeQ1NH0LB4G4FiI_HLbrgzoBQh-P8tfPpuMHNxD0WQ/exec",

@@ -398,8 +398,16 @@ function getRowsForKpi(kpi, rows) {
   );
 }
 
-function getKpiRecentEntries(kpi, rows, limit = 3) {
+function getKpiRecentEntries(kpi, rows, limit = 3, mostRecentEntryOnly = false) {
   const rowsForKpi = getRowsForKpi(kpi, rows);
+  if (mostRecentEntryOnly) {
+    return rowsForKpi
+      .slice(0, limit)
+      .map((row) => ({
+        timestamp: row.timestamp,
+        displayValue: formatKpiRawValue(kpi, row[kpi.columnKey] ?? null),
+      }));
+  }
   return rowsForKpi
     .filter((row) => row?.[kpi.columnKey] != null && row?.[kpi.columnKey] !== "")
     .slice(0, limit)
@@ -409,13 +417,15 @@ function getKpiRecentEntries(kpi, rows, limit = 3) {
     }));
 }
 
-function computeKpiValue(kpi, rows) {
+function computeKpiValue(kpi, rows, mostRecentEntryOnly = false) {
   if (!Array.isArray(rows) || rows.length === 0) {
     return { display: "—", badge: null };
   }
 
   const workingRows = getRowsForKpi(kpi, rows);
-  const latest = getMostRecentRowWithValue(workingRows, kpi.columnKey);
+  const latest = mostRecentEntryOnly
+    ? (workingRows[0] ?? null)
+    : getMostRecentRowWithValue(workingRows, kpi.columnKey);
   const raw = latest?.[kpi.columnKey] ?? null;
 
   if (kpi.format === "count") {
@@ -506,7 +516,7 @@ function renderLogin() {
       <div class="app-container">
         <div class="login-wrapper">
           <div class="brand-mark">Y</div>
-          <div class="login-title">Yost Facilities</div>
+          <div class="login-title">Yost/Wilpon Facilities</div>
           <div class="login-subtitle">Facilities Dashboard</div>
 
           <form id="login-form">
@@ -559,7 +569,7 @@ function renderOverview() {
 
       const kpiMinis = form.kpis
         .map((kpi) => {
-          const { display } = computeKpiValue(kpi, rows);
+          const { display } = computeKpiValue(kpi, rows, form.mostRecentEntryOnly);
           return `
             <div class="bubble-kpi">
               <span class="bubble-kpi-label">${kpi.label}</span>
@@ -600,7 +610,7 @@ function renderOverview() {
           <div class="header-left">
             <div class="brand-mark">Y</div>
             <div class="header-title-group">
-              <div class="header-title">Yost Facilities</div>
+              <div class="header-title">Yost/Wilpon Facilities</div>
               <div class="header-subtitle">Facilities Dashboard</div>
             </div>
           </div>
@@ -668,14 +678,16 @@ function renderSectorDetail() {
   // KPI cards
   const kpiCardsHtml = form.kpis
     .map((kpi) => {
-      const { display } = computeKpiValue(kpi, kpiRows);
+      const { display } = computeKpiValue(kpi, kpiRows, form.mostRecentEntryOnly);
       const badge = getKpiBadge(kpi, kpiRows);
       const rowsForTimestamp = getRowsForKpi(kpi, kpiRows);
-      const latestRow = getMostRecentRowWithValue(rowsForTimestamp, kpi.columnKey) ?? rowsForTimestamp[0] ?? null;
+      const latestRow = form.mostRecentEntryOnly
+        ? (rowsForTimestamp[0] ?? null)
+        : (getMostRecentRowWithValue(rowsForTimestamp, kpi.columnKey) ?? rowsForTimestamp[0] ?? null);
       const timestampDisplay = latestRow?.timestamp
         ? formatTimestamp(latestRow.timestamp)
         : "No recent entries";
-      const recentEntries = getKpiRecentEntries(kpi, kpiRows, 3);
+      const recentEntries = getKpiRecentEntries(kpi, kpiRows, 3, form.mostRecentEntryOnly);
       const recentEntriesJson = encodeURIComponent(JSON.stringify(recentEntries));
       const badgeHtml = badge
         ? `<span class="kpi-badge ${badge.kind === "bad" ? "bad" : ""}">${badge.label}</span>`
@@ -756,7 +768,7 @@ function renderSectorDetail() {
           <div class="header-left">
             <div class="brand-mark">Y</div>
             <div class="header-title-group">
-              <div class="header-title">Yost Facilities</div>
+              <div class="header-title">Yost/Wilpon Facilities</div>
               <div class="header-subtitle">${form.label}</div>
             </div>
           </div>
