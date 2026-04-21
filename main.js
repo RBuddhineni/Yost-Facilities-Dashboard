@@ -541,7 +541,7 @@ function renderLogin() {
           </form>
 
           <div class="login-footnote">
-            For Yost Facilities staff use only.
+            For Yost/Wilpon Facilities staff use only.
           </div>
         </div>
       </div>
