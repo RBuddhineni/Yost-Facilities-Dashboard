@@ -117,7 +117,7 @@ export const APP_CONFIG = {
         { id: "a", label: "Last Submission", columnKey: "timestamp", format: "date" },
         { id: "c", label: "Tub", columnKey: "selectTub", format: "string" },
         { id: "e", label: "pH", columnKey: "pH", format: "number" },
-        { id: "f", label: "Chlorine/Bromine", columnKey: "chlorine", format: "number" },
+        { id: "f", label: "Chlorine", columnKey: "chlorine", format: "number" },
         { id: "h", label: "Pool Temp", columnKey: "poolTemperature", format: "number" },
         { id: "l", label: "What Chemicals", columnKey: "whatChemicals", format: "string" },
       ],
