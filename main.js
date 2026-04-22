@@ -129,10 +129,18 @@ function coerceSheetRow(rawRow, columns) {
   for (const rawKey of Object.keys(rawRow)) {
     trimmedRaw[String(rawKey).trim()] = rawRow[rawKey];
   }
+  function resolveColumnValue(columnLabel, key) {
+    const labels = Array.isArray(columnLabel) ? columnLabel : [columnLabel];
+    for (const label of labels) {
+      const trimmedLabel = String(label).trim();
+      const value = rawRow[label] ?? trimmedRaw[trimmedLabel];
+      if (value != null && value !== "") return value;
+    }
+    return rawRow[key] ?? null;
+  }
   const result = {};
   for (const [key, columnLabel] of Object.entries(columns)) {
-    const trimmedLabel = String(columnLabel).trim();
-    result[key] = rawRow[columnLabel] ?? trimmedRaw[trimmedLabel] ?? rawRow[key] ?? null;
+    result[key] = resolveColumnValue(columnLabel, key);
   }
   return result;
 }
@@ -276,10 +284,10 @@ async function fetchSheet(formConfig) {
   const normalizedRows = normalizeSheetData(json);
   const mappedRows = normalizedRows.map((row) => coerceSheetRow(row, formConfig.columns));
 
-  if (mappedRows.length > 0 && mappedRows[0].timestamp) {
+  if (mappedRows.length > 0) {
     mappedRows.sort((a, b) => {
-      const timeA = new Date(a.timestamp).getTime();
-      const timeB = new Date(b.timestamp).getTime();
+      const timeA = new Date(a.timestamp ?? a.date).getTime();
+      const timeB = new Date(b.timestamp ?? b.date).getTime();
       return timeB - timeA;
     });
   }
@@ -506,7 +514,7 @@ function renderLogin() {
       <div class="app-container">
         <div class="login-wrapper">
           <div class="brand-mark">Y</div>
-          <div class="login-title">Yost Facilities</div>
+          <div class="login-title">Yost/Wilpon Facilities</div>
           <div class="login-subtitle">Facilities Dashboard</div>
 
           <form id="login-form">
@@ -531,7 +539,7 @@ function renderLogin() {
           </form>
 
           <div class="login-footnote">
-            For Yost Facilities staff use only.
+            For Yost/Wilpon Facilities staff use only.
           </div>
         </div>
       </div>
@@ -557,9 +565,10 @@ function renderOverview() {
         ? formatTimestamp(latestRow.timestamp)
         : "No recent entries";
 
+      const kpiRows = form.latestRowOnlyForKpis ? rows.slice(0, 1) : rows;
       const kpiMinis = form.kpis
         .map((kpi) => {
-          const { display } = computeKpiValue(kpi, rows);
+          const { display } = computeKpiValue(kpi, kpiRows);
           return `
             <div class="bubble-kpi">
               <span class="bubble-kpi-label">${kpi.label}</span>
@@ -600,7 +609,7 @@ function renderOverview() {
           <div class="header-left">
             <div class="brand-mark">Y</div>
             <div class="header-title-group">
-              <div class="header-title">Yost Facilities</div>
+              <div class="header-title">Yost/Wilpon Facilities</div>
               <div class="header-subtitle">Facilities Dashboard</div>
             </div>
           </div>
@@ -662,7 +671,7 @@ function renderSectorDetail() {
 
   const allRows = appState.dataByForm[form.id] ?? [];
   const filteredRows = filterRowsByTime(allRows, appState.timeFilter);
-  const kpiRows = allRows;
+  const kpiRows = form.latestRowOnlyForKpis ? allRows.slice(0, 1) : allRows;
   const hasError = !!(appState.errorsByForm?.[form.id]);
 
   // KPI cards
@@ -756,7 +765,7 @@ function renderSectorDetail() {
           <div class="header-left">
             <div class="brand-mark">Y</div>
             <div class="header-title-group">
-              <div class="header-title">Yost Facilities</div>
+              <div class="header-title">Yost/Wilpon Facilities</div>
               <div class="header-subtitle">${form.label}</div>
             </div>
           </div>

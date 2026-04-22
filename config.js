@@ -71,7 +71,7 @@ export const APP_CONFIG = {
         selectTub: "Select tub",
         dropsReader: "Drops/Reader",
         pH: "pH",
-        bromine: "Bromine",
+        chlorine: ["Chlorine", "Bromine"],
         alkalinity: "Alkalinity",
         poolTemperature: "Pool Temperature",
         cl: "CL",
@@ -85,8 +85,8 @@ export const APP_CONFIG = {
         { id: "c", label: "Tub", columnKey: "selectTub", format: "string" },
         { id: "e-hot", label: "pH (Hot)", columnKey: "pH", format: "number", filterBy: { columnKey: "selectTub", value: "Hot" } },
         { id: "e-cold", label: "pH (Cold)", columnKey: "pH", format: "number", filterBy: { columnKey: "selectTub", value: "Cold" } },
-        { id: "f-hot", label: "Bromine (Hot)", columnKey: "bromine", format: "number", filterBy: { columnKey: "selectTub", value: "Hot" } },
-        { id: "f-cold", label: "Bromine (Cold)", columnKey: "bromine", format: "number", filterBy: { columnKey: "selectTub", value: "Cold" } },
+        { id: "f-hot", label: "Chlorine (Hot)", columnKey: "chlorine", format: "number", filterBy: { columnKey: "selectTub", value: "Hot" } },
+        { id: "f-cold", label: "Chlorine (Cold)", columnKey: "chlorine", format: "number", filterBy: { columnKey: "selectTub", value: "Cold" } },
         { id: "h-hot", label: "Pool Temp (Hot)", columnKey: "poolTemperature", format: "number", filterBy: { columnKey: "selectTub", value: "Hot" } },
         { id: "h-cold", label: "Pool Temp (Cold)", columnKey: "poolTemperature", format: "number", filterBy: { columnKey: "selectTub", value: "Cold" } },
         { id: "l", label: "What Chemicals", columnKey: "whatChemicals", format: "string" },
@@ -99,11 +99,11 @@ export const APP_CONFIG = {
       sheetJsonUrl:
         "https://script.google.com/macros/s/AKfycbx7HJMz6_Qs3OmCAB1WSqs1bSEyUyRjcrNE1auGZ4ejioWoGLiS0JWW98LL3XE7my1V/exec",
       columns: {
-        timestamp: "Timestamp",
+        timestamp: ["Timestamp", "Submission Date", "Date"],
         date: "Date",
         time: "Time",
         name: "Name",
-        bromine: "Bromine",
+        chlorine: ["Chlorine", "Bromine"],
         pH: "pH",
         alkalinity: "Alkalinity",
         calciumHardness: "Calcium Hardness",
@@ -117,7 +117,7 @@ export const APP_CONFIG = {
       },
       kpis: [
         { id: "a", label: "Implementation Date", columnKey: "timestamp", format: "date" },
-        { id: "e", label: "Bromine", columnKey: "bromine", format: "number" },
+        { id: "e", label: "Chlorine", columnKey: "chlorine", format: "number" },
         { id: "f", label: "pH", columnKey: "pH", format: "number" },
         { id: "i", label: "Temperature", columnKey: "temperature", format: "number" },
         { id: "n", label: "Comments", columnKey: "comments", format: "string" },
@@ -212,6 +212,7 @@ export const APP_CONFIG = {
         { id: "i", label: "Snow Removal", columnKey: "snowRemoval", format: "string" },
         { id: "k", label: "Additional Maint Activities", columnKey: "additionalActivities", format: "string" },
       ],
+      latestRowOnlyForKpis: true,
     },
     {
       id: "alumni-field-astroturf",
@@ -246,6 +247,7 @@ export const APP_CONFIG = {
         { id: "m", label: "Snow Removal", columnKey: "snowRemoval", format: "string" },
         { id: "o", label: "Additional Maint Activities", columnKey: "additionalActivities", format: "string" },
       ],
+      latestRowOnlyForKpis: true,
     },
   ],
 };
