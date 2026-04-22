@@ -472,7 +472,7 @@ function attachTimeFilterListeners() {
 function buildTableHtml(form, rows) {
   const cols = form.columns;
   const order = Object.keys(cols).filter((key) => cols[key] !== "");
-  const headers = order.map((key) => `<th>${cols[key]}</th>`).join("");
+  const headers = order.map((key) => { const col = cols[key]; return `<th>${Array.isArray(col) ? col[0] : col}</th>`; }).join("");
 
   const bodyRows =
     rows.length === 0

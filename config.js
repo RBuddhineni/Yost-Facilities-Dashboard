@@ -94,7 +94,7 @@ export const APP_CONFIG = {
     },
     {
       id: "fisher-therapy-pool",
-      label: "Fisher Therapy Pool Checks",
+      label: "Fisher Tub Check",
       sheetUrl: "https://docs.google.com/spreadsheets/d/1BlBtDMQzfhuRSFXsggr6nTbdHh8u9xT6bc23QMoSQyQ/edit?gid=434939189#gid=434939189",
       sheetJsonUrl:
         "https://script.google.com/macros/s/AKfycbwyzTEfHD2CKrqSQHcunAZNcUuIZI8kK3IFsDCgDZ8_1b1MFE6XtZ6vYZiek8o1SZfE/exec?sheet=Baseball",
